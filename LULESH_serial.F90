@@ -83,7 +83,7 @@
 !advertising or product endorsement purposes.
 
 
-PROGRAM lulesh_serial
+PROGRAM lulesh
 
 
 IMPLICIT NONE
@@ -3575,6 +3575,6 @@ SUBROUTINE luabort(errcode)
 END SUBROUTINE luabort
 
 
-END PROGRAM lulesh_serial
+END PROGRAM lulesh
 
 
