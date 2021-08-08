@@ -82,10 +82,12 @@
 !Lawrence Livermore National Security, LLC, and shall not be used for
 !advertising or product endorsement purposes.
 
-! Need to import lulesh-comm.cc here!
+
 
 PROGRAM lulesh
 
+! Import the communcation layer
+use lulesh_comm
 
 IMPLICIT NONE
 
