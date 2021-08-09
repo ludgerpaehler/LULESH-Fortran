@@ -87,7 +87,7 @@
 PROGRAM lulesh
 
 ! Import the communcation layer
-use lulesh_comm
+USE lulesh_comm
 
 IMPLICIT NONE
 
@@ -746,7 +746,7 @@ SUBROUTINE TimeIncrement()
   IMPLICIT NONE 
 
   REAL(KIND=8) :: targetdt
-  REAL(KIND=8) :: ratio, olddt, newdt
+  REAL(KIND=8) :: ratio, olddt, newdt, gnewdt
 
   targetdt = domain%m_stoptime - domain%m_time
 
@@ -755,14 +755,22 @@ SUBROUTINE TimeIncrement()
      olddt = domain%m_deltatime
      
      ! This will require a reduction in parallel
-     newdt = 1.0e+20
+     gnewdt = 1.0e+20
 
      IF (domain%m_dtcourant < newdt) THEN
-        newdt = domain%m_dtcourant / 2.0_RLK
+        gnewdt = domain%m_dtcourant / 2.0_RLK
      END IF
 
      IF (domain%m_dthydro < newdt) THEN
-        newdt = domain%m_dthydro * (2.0_RLK/3.0_RLK)
+        gnewdt = domain%m_dthydro * (2.0_RLK/3.0_RLK)
+     END IF
+
+     IF (USE_MPI) THEN
+       ! Simplified the following line, due to the used datatypes
+       ! ((sizeof(Real_t) == 4) ? MPI_FLOAT: MPI_DOUBLE)
+       call MPI_ALLREDUCE(gnewdt, newdt, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD)
+     ELSE
+       newdt = gnewdt
      END IF
 
      ratio = newdt / olddt
@@ -1888,7 +1896,11 @@ SUBROUTINE CalcHourglassControlForElems(determ, hgcoef)
 
 !   Do a check for negative volumes
     IF ( domain%m_v(i) <= (0.0_RLK) ) THEN
-      CALL luabort(VolumeError)
+      IF (USE_MPI) THEN
+        CALL MPI_ABORT(MPI_COMM_WORLD, VolumeError)
+      ELSE
+        CALL luabort(VolumeError)
+      ENDIF
     ENDIF
   ENDDO
 
@@ -1937,10 +1949,15 @@ SUBROUTINE CalcVolumeForceForElems()
     CALL IntegrateStressForElems( numElem, sigxx, sigyy, sigzz, determ)
 
 !   check for negative element volume and abort if found
+!   Adjusted formatting here as it looked a little off..
     DO k=0, numElem-1
-       IF (determ(k) <= 0.0_RLK) THEN
-         CALL luabort(VolumeError)
-       ENDIF
+      IF (determ(k) <= 0.0_RLK) THEN
+        IF (USE_MPI) THEN
+          CALL MPI_ABORT(MPI_COMM_WORLD, VolumeError)
+        ELSE
+          CALL luabort(VolumeError)
+        ENDIF
+      ENDIF
     ENDDO
 
     CALL CalcHourglassControlForElems(determ, hgcoef)
@@ -1961,6 +1978,17 @@ SUBROUTINE CalcForceForNodes()
   INTEGER(KIND=4) :: i
 
   numNode = domain%m_numNode
+
+  IF (USE_MPI) THEN
+    CALL CommRecv(domain, MSG_COMM_SBN, domain%m_sizeX() + 1, domain%m_sizeY() + 1, domain%m_sizeZ() + 1, .TRUE., .FALSE.)
+  ENDIF
+
+!  #if USE_MPI  
+!  CommRecv(domain, MSG_COMM_SBN, 3,
+!           domain.sizeX() + 1, domain.sizeY() + 1, domain.sizeZ() + 1,
+!           true, false) ;
+!  #endif 
+
   DO i=0, numNode-1
     domain%m_fx(i) = 0.0_RLK
     domain%m_fy(i) = 0.0_RLK
@@ -1969,6 +1997,18 @@ SUBROUTINE CalcForceForNodes()
 
 ! Calcforce calls partial, force, hourq
   CALL CalcVolumeForceForElems()
+
+  IF (USE_MPI) THEN
+    CALL CommSend(domain, MSG_COMM_SBN, domain%m_sizeX() + 1, domain%m_sizeY() + 1, domain%m_sizeZ() + 1, .TRUE., .FALSE.)
+    Call CommSBN(domain)
+  ENDIF
+
+!  #if USE_MPI  
+!    CommSend<&Domain::fx, &Domain::fy, &Domain::fz>(domain, MSG_COMM_SBN,
+!             domain.sizeX() + 1, domain.sizeY() + 1, domain.sizeZ() +  1,
+!             true, false) ;
+!    CommSBN<&Domain::fx, &Domain::fy, &Domain::fz>(domain) ;
+!  #endif 
 
 ! Calculate Nodal Forces at domain boundaries
 ! problem->commSBN->Transfer(CommSBN::forces)
