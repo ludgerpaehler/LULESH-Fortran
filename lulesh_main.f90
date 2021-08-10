@@ -218,7 +218,10 @@ TYPE domain_type
   INTEGER ::   m_sizeZ 
   
   INTEGER ::   m_numElem          ! Elements/Nodes in this domain 
-  INTEGER ::   m_numNode 
+  INTEGER ::   m_numNode
+
+  INTEGER :: maxPlaneSize
+  INTEGER :: maxEdgeSize 
 
   
 END TYPE domain_type
@@ -497,9 +500,27 @@ DO i=0,edgeElems-1
    END DO
 END DO
 
+!----------------------------------------------------------
+!  Need to introduce the concept of a local domain here!
+!----------------------------------------------------------
+
+IF (USE_MPI) THEN
+  fieldData = domain%m_nodalMass
+
+  ! Initial domain boundary communcation
+  CALL CommRecv(local_domain, MSG_COMM_SBN, 1, local_domain%m_sizeX() + 1, local_domain%m_sizeY() + 1, local_domain%m_sizeZ() + 1, .TRUE., .FALSE.)
+  CALL CommSend(local_domain, MSG_COMM_SBN, local_domain%m_sizeX() + 1, local_domain%m_sizeY() + 1, local_domain%m_sizeZ() + 1, .TRUE., .FALSE.)
+  CALL CommSBN(local_domain)
+
+  ! End initialization
+  CALL MPI_BARRIER(MPI_COMM_WORLD)
+ENDIF
 
 
 
+IF (USE_MPI) THEN
+  REAL(KIND=8) :: start = CALL MPI_WTIME()
+ENDIF
 
 ! timestep to solution
 !!$ timeval start, end
@@ -1644,7 +1665,7 @@ SUBROUTINE CalcFBHourglassForceForElems(determ,           &
   gamma(5,3) = (-1.0_RLK)
   gamma(6,3) = ( 1.0_RLK)
   gamma(7,3) = (-1.0_RLK)
-  
+
 ! *************************************************
 ! compute the hourglass modes
   
@@ -1880,6 +1901,8 @@ SUBROUTINE CalcHourglassControlForElems(determ, hgcoef)
     CALL CollectDomainNodesToElemNodes(elemToNode, x1, y1, z1)
     CALL CalcElemVolumeDerivative(pfx, pfy, pfz, x1, y1, z1)
 
+    
+
 !   load into temporary storage for FB Hour Glass control
     DO ii=0, 7
       jj=8*i+ii
@@ -1983,12 +2006,6 @@ SUBROUTINE CalcForceForNodes()
     CALL CommRecv(domain, MSG_COMM_SBN, domain%m_sizeX() + 1, domain%m_sizeY() + 1, domain%m_sizeZ() + 1, .TRUE., .FALSE.)
   ENDIF
 
-!  #if USE_MPI  
-!  CommRecv(domain, MSG_COMM_SBN, 3,
-!           domain.sizeX() + 1, domain.sizeY() + 1, domain.sizeZ() + 1,
-!           true, false) ;
-!  #endif 
-
   DO i=0, numNode-1
     domain%m_fx(i) = 0.0_RLK
     domain%m_fy(i) = 0.0_RLK
@@ -2002,13 +2019,6 @@ SUBROUTINE CalcForceForNodes()
     CALL CommSend(domain, MSG_COMM_SBN, domain%m_sizeX() + 1, domain%m_sizeY() + 1, domain%m_sizeZ() + 1, .TRUE., .FALSE.)
     Call CommSBN(domain)
   ENDIF
-
-!  #if USE_MPI  
-!    CommSend<&Domain::fx, &Domain::fy, &Domain::fz>(domain, MSG_COMM_SBN,
-!             domain.sizeX() + 1, domain.sizeY() + 1, domain.sizeZ() +  1,
-!             true, false) ;
-!    CommSBN<&Domain::fx, &Domain::fy, &Domain::fz>(domain) ;
-!  #endif 
 
 ! Calculate Nodal Forces at domain boundaries
 ! problem->commSBN->Transfer(CommSBN::forces)
@@ -2115,12 +2125,20 @@ SUBROUTINE LagrangeNodal()
   REAL(KIND=8) :: delt
   REAL(KIND=8) :: u_cut
 
+!  #ifdef SEDOV_SYNC_POS_VEL_EARLY -> Let's assume it to always be true, what is the equivalent to this then in Fortran?
+!    Domain_member fieldData[6] ;
+!  #endif
+
   delt  = domain%m_deltatime
   u_cut = domain%m_u_cut
 
 ! time of boundary condition evaluation is beginning of step for force and
 ! acceleration boundary conditions.
   CALL CalcForceForNodes()
+
+  IF (USE_MPI) THEN
+    CALL CommRecv(domain, MSG_SYNC_POS_VEL, 6, domain%m_sizeX() + 1, domain%m_sizeY() + 1, domain%m_sizeZ() + 1, .FALSE., .FALSE.)
+  ENDIF
 
   CALL CalcAccelerationForNodes()
 
@@ -2129,6 +2147,11 @@ SUBROUTINE LagrangeNodal()
   CALL CalcVelocityForNodes( delt, u_cut )
 
   CALL CalcPositionForNodes( delt )
+
+  IF (USE_MPI) THEN
+    CALL CommSend(MSG_SYNC_POS_VEL, domain%m_sizeX() + 1, domain%m_sizeY() + 1, domain%m_sizeZ() + 1, .FALSE., .FALSE.)
+    CALL CommSyncPosVel(domain)
+  ENDIF
 
 END SUBROUTINE LagrangeNodal
 
@@ -2545,7 +2568,11 @@ SUBROUTINE CalcLagrangeElements( deltatime)
 
 !     See if any volumes are negative, and take appropriate action.
       IF (domain%m_vnew(k) <= (0.0_RLK)) THEN
-        call luabort(VolumeError)
+        IF (USE_MPI) THEN
+          CALL MPI_ABORT(MPI_COMM_WORLD, VolumeError)
+        ELSE
+          CALL luabort(VolumeError)
+        ENDIF
       ENDIF
     ENDDO
   ENDIF
@@ -2942,12 +2969,32 @@ SUBROUTINE CalcQForElems()
 
   qstop = domain%m_qstop
   numElem = domain%m_numElem
+
+  IF (USE_MPI) THEN
+    CALL CommRecv(domain, MSG_MONOQ, 3, domain%m_sizeX, domain%m_sizeY, domain%m_sizeZ, .TRUE., .TRUE.)
+  ENDIF
+
 !
 ! MONOTONIC Q option
 !
 
 ! Calculate velocity gradients
   CALL CalcMonotonicQGradientsForElems()
+
+  IF (USE_MPI) THEN
+  ! A little unsure how the domain member stuff translates, but it needs to be done!
+  !  Domain_member fieldData[3] ;
+      
+  !  /* Transfer veloctiy gradients in the first order elements */
+  !  /* problem->commElements->Transfer(CommElements::monoQ) ; */
+
+  !  fieldData[0] = &Domain::delv_xi ;
+  !  fieldData[1] = &Domain::delv_eta ;
+  !  fieldData[2] = &Domain::delv_zeta ;
+
+    CALL CommSend(domain, MSG_MONOQ, domain%m_sizeX, domain%m_sizeY, domain%m_sizeZ, .TRUE., .TRUE.)
+    CALL CommMonoQ(domain)
+  ENDIF
 
 ! Transfer veloctiy gradients in the first order elements
 ! problem->commElements->Transfer(CommElements::monoQ)
@@ -2964,7 +3011,11 @@ SUBROUTINE CalcQForElems()
     ENDDO
 
     IF (idx >= 0) THEN
-      CALL luabort(QStopError)
+      IF (USE_MPI) THEN
+        CALL MPI_ABORT(MPI_COMM_WORLD, QStopError)
+      ELSE
+        CALL luabort(QStopError)
+      ENDIF
     ENDIF
   ENDIF
 
@@ -3370,7 +3421,11 @@ SUBROUTINE ApplyMaterialPropertiesForElems()
         IF (vc > eosvmax) vc = eosvmax
       ENDIF
       IF (vc <= 0.0_RLK) THEN
-        CALL luabort(VolumeError)
+        IF (USE_MPI) THEN
+          CALL MPI_ABORT(MPI_COMM_WORLD, VolumeError)
+        ELSE
+          CALL luabort(VolumeError)
+        ENDIF
       ENDIF
     ENDDO
 
@@ -3592,6 +3647,10 @@ SUBROUTINE LagrangeLeapFrog()
 
   IMPLICIT NONE
 
+! #ifdef SEDOV_SYNC_POS_VEL_LATE
+!    Domain_member fieldData[6] ;
+! #endif
+
 ! calculate nodal forces, accelerations, velocities, positions, with
 ! applied boundary conditions and slide surface considerations
 
@@ -3601,7 +3660,26 @@ SUBROUTINE LagrangeLeapFrog()
 ! material states
 
   CALL LagrangeElements()
+
+  IF (USE_MPI) THEN
+    CALL CommRecv(domain, MSG_SYNC_POS_VEL, 6, domain%m_sizeX() + 1, domain%m_sizeY() + 1, domain%m_sizeZ() + 1, .FALSE., .FALSE.)
+
+    ! Need to initialize the field data correctly.
+    ! fieldData[0] = &Domain::x ;
+    ! fieldData[1] = &Domain::y ;
+    ! fieldData[2] = &Domain::z ;
+    ! fieldData[3] = &Domain::xd ;
+    ! fieldData[4] = &Domain::yd ;
+    ! fieldData[5] = &Domain::zd ;
+
+    CALL CommSend(domain, MSG_SYNC_POS_VEL, 6, fieldData, domain%m_sizeX() + 1, domain%m_sizeY() + 1, domain%m_sizeZ() + 1, .FALSE., .FALSE.)
+  ENDIF
+
   CALL CalcTimeConstraintsForElems()
+
+  IF (USE_MPI) THEN
+    CALL CommSyncPosVel(domain)
+  ENDIF
 
 ! CALL LagrangeRelease()  ! Creation/destruction of temps may be important to capture 
 
