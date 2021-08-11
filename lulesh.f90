@@ -86,8 +86,6 @@
 
 PROGRAM lulesh
 
-! Import the communcation layer
-use lulesh_comm
 
 IMPLICIT NONE
 
