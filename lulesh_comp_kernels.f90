@@ -191,8 +191,9 @@ CONTAINS
   SUBROUTINE AllocateNodalPersistent(domain, size)
     IMPLICIT NONE
 
-    INTEGER :: size
     TYPE(domain_type), INTENT(INOUT) :: domain
+    INTEGER :: size
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     ALLOCATE(domain%m_x(0:size-1))
     ALLOCATE(domain%m_y(0:size-1)) 
@@ -225,8 +226,10 @@ CONTAINS
 
   SUBROUTINE AllocateElemPersistent(domain, size)
     IMPLICIT NONE
+   
+    TYPE(domain_type), INTENT(INOUT) :: domain  !<- A little unsure with the allocation here.
     INTEGER :: size
-    TYPE(domain_type), INTENT(INOUT) :: domain  !<- A little unsure with the allocation here. 
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     ALLOCATE(domain%m_matElemlist(0:size-1)) 
     ALLOCATE(domain%m_nodelist(0:8*size-1)) 
@@ -370,6 +373,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8) :: targetdt
     REAL(KIND=8) :: ratio, olddt, newdt
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     targetdt = domain%m_stoptime - domain%m_time
 
@@ -453,6 +457,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:7)  :: x, y, z
     REAL(KIND=8), DIMENSION(0:7,0:2) :: b ! alloc 2nd dim to 8 or 0:7
     REAL(KIND=8), INTENT(INOUT) :: el_volume
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8)  :: x0,x1,x2,x3,x4,x5,x6,x7
     REAL(KIND=8)  :: y0,y1,y2,y3,y4,y5,y6,y7
     REAL(KIND=8)  :: z0,z1,z2,z3,z4,z5,z6,z7
@@ -582,6 +587,7 @@ CONTAINS
     REAL(KIND=8) :: areaX
     REAL(KIND=8) :: areaY
     REAL(KIND=8) :: areaZ
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8), PARAMETER :: RHALF = 0.5_RLK
     REAL(KIND=8), PARAMETER :: RQTR  = 0.25_RLK
 
@@ -618,7 +624,8 @@ CONTAINS
 
     IMPLICIT NONE 
     REAL(KIND=8), DIMENSION(0:) :: pfx,pfy,pfz
-    REAL(KIND=8), DIMENSION(0:) :: x, y, z 
+    REAL(KIND=8), DIMENSION(0:) :: x, y, z
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     DO i = 0, 7
       pfx(i) = 0.0_RLK
@@ -748,7 +755,8 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER      :: numElem
     REAL(KIND=8),DIMENSION(0:) :: sigxx, sigyy, sigzz
-    REAL(KIND=8),DIMENSION(0:), INTENT(INOUT) :: determ  
+    REAL(KIND=8),DIMENSION(0:), INTENT(INOUT) :: determ
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8) :: fx, fy, fz
     REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: fx_elem, fy_elem, fz_elem
@@ -785,16 +793,6 @@ CONTAINS
 
       CALL SumElemStressesToNodeForces( B, sigxx(kk), sigyy(kk), sigzz(kk),  &
                                         fx_elem(kk*8), fy_elem(kk*8), fz_elem(kk*8) )
-
-  #if 0
-  !   copy nodal force contributions to global force arrray.
-      DO lnode=0, 7
-        node = elemNodes(lnode+1)
-        domain%m_fx(gnode) = domain%m_fx(gnode) + fx_local(lnode)
-        domain%m_fy(gnode) = domain%m_fy(gnode) + fy_local(lnode)
-        domain%m_fz(gnode) = domain%m_fz(gnode) + fz_local(lnode)
-      ENDDO
-  #endif
     ENDDO
 
     numNode = domain%m_numNode
@@ -886,6 +884,7 @@ CONTAINS
     REAL(KIND=8) :: y0, y1, y2, y3, y4, y5
     REAL(KIND=8) :: z0, z1, z2, z3, z4, z5
     REAL(KIND=8) :: dvdx, dvdy, dvdz
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8), PARAMETER :: twelfth = 1.0_RLK / 12.0_RLK
 
@@ -1169,6 +1168,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: x8n, y8n, z8n
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: dvdx, dvdy, dvdz
     REAL(KIND=8) :: hourg
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8) :: coefficient, volinv, ss1, mass1, volume13
     REAL(KIND=8) :: hourmodx, hourmody, hourmodz
@@ -1362,40 +1362,6 @@ CONTAINS
       fz_local(5) = hgfz(5)
       fz_local(6) = hgfz(6)
       fz_local(7) = hgfz(7)
-
-  #if 0
-      domain%m_fx(n0si2) = domain%m_fx(n0si2) + hgfx(0)
-      domain%m_fy(n0si2) = domain%m_fy(n0si2) + hgfy(0)
-      domain%m_fz(n0si2) = domain%m_fz(n0si2) + hgfz(0)
-
-      domain%m_fx(n1si2) = domain%m_fx(n1si2) + hgfx(1)
-      domain%m_fy(n1si2) = domain%m_fy(n1si2) + hgfy(1)
-      domain%m_fz(n1si2) = domain%m_fz(n1si2) + hgfz(1)
-
-      domain%m_fx(n2si2) = domain%m_fx(n2si2) + hgfx(2)
-      domain%m_fy(n2si2) = domain%m_fy(n2si2) + hgfy(2)
-      domain%m_fz(n2si2) = domain%m_fz(n2si2) + hgfz(2)
-
-      domain%m_fx(n3si2) = domain%m_fx(n3si2) + hgfx(3)
-      domain%m_fy(n3si2) = domain%m_fy(n3si2) + hgfy(3)
-      domain%m_fz(n3si2) = domain%m_fz(n3si2) + hgfz(3)
-
-      domain%m_fx(n4si2) = domain%m_fx(n4si2) + hgfx(4)
-      domain%m_fy(n4si2) = domain%m_fy(n4si2) + hgfy(4)
-      domain%m_fz(n4si2) = domain%m_fz(n4si2) + hgfz(4)
-
-      domain%m_fx(n5si2) = domain%m_fx(n5si2) + hgfx(5)
-      domain%m_fy(n5si2) = domain%m_fy(n5si2) + hgfy(5)
-      domain%m_fz(n5si2) = domain%m_fz(n5si2) + hgfz(5)
-
-      domain%m_fx(n6si2) = domain%m_fx(n6si2) + hgfx(6)
-      domain%m_fy(n6si2) = domain%m_fy(n6si2) + hgfy(6)
-      domain%m_fz(n6si2) = domain%m_fz(n6si2) + hgfz(6)
-
-      domain%m_fx(n7si2) = domain%m_fx(n7si2) + hgfx(7)
-      domain%m_fy(n7si2) = domain%m_fy(n7si2) + hgfy(7)
-      domain%m_fz(n7si2) = domain%m_fz(n7si2) + hgfz(7)
-  #endif
     ENDDO
 
     numNode = domain%m_numNode
@@ -1432,6 +1398,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8),DIMENSION(0:) :: determ
     REAL(KIND=8) :: hgcoef
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: dvdx
     REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: dvdy
@@ -1503,6 +1470,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER(KIND=4) :: numElem
     INTEGER(KIND=4) :: k
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8) :: hgcoef
     REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: sigxx
     REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: sigyy
@@ -1550,6 +1518,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER(KIND=4) :: numNode
     INTEGER(KIND=4) :: i
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     numNode = domain%m_numNode
     DO i=0, numNode-1
@@ -1592,6 +1561,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER(KIND=4) :: numNodeBC
     INTEGER(KIND=4) :: i
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     numNodeBC = (domain%m_sizeX+1)*(domain%m_sizeX+1)
 
@@ -1616,6 +1586,7 @@ CONTAINS
     REAL(KIND=8)    :: dt, u_cut
     INTEGER(KIND=4) :: numNode
     INTEGER(KIND=4) :: i
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8)    :: xdtmp, ydtmp, zdtmp
 
     numNode = domain%m_numNode
@@ -1690,6 +1661,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:7) :: x, y, z
     REAL(KIND=8) :: volume
     REAL(KIND=8) :: a
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8) :: charLength
 
     charLength = 0.0_RLK
@@ -1740,6 +1712,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:7,0:2), INTENT(IN)  :: b   ![3,8]
     REAL(KIND=8),                     INTENT(IN)  :: detJ
     REAL(KIND=8), DIMENSION(0:5),     INTENT(OUT) :: d
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8) :: dyddx, dxddy, dzddx, dxddz, dzddy, dyddz
     REAL(KIND=8) :: inv_detJ
@@ -1812,6 +1785,7 @@ CONTAINS
     INTEGER      :: numElem
     INTEGER      :: k, lnode, gnode, j
     REAL(KIND=8) :: dt
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8), DIMENSION(0:7,0:2) :: B  ! shape function derivatives
     REAL(KIND=8), DIMENSION(0:5):: D
@@ -1886,10 +1860,11 @@ CONTAINS
     REAL(KIND=8)    :: deltatime
     REAL(KIND=8)    :: vdov, vdovthird
     INTEGER(KIND=4) :: numElem, k
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     numElem = domain%m_numElem
     IF (numElem > 0) THEN
-      CALL CalcKinematicsForElems(numElem, deltatime)
+      CALL CalcKinematicsForElems(domain, numElem, deltatime)
 
   !   element loop to do some stuff not included in the elemlib function.
 
@@ -1919,6 +1894,7 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8), PARAMETER :: ptiny = 1.e-36_RLK
     REAL(KIND=8)            :: ax,ay,az,dxv,dyv,dzv
     REAL(KIND=8)            :: x0,x1,x2,x3,x4,x5,x6,x7
@@ -2087,6 +2063,7 @@ CONTAINS
     REAL(KIND=8) :: qlc_monoq,  qqc_monoq
     REAL(KIND=8) :: monoq_limiter_mult,  monoq_max_slope
     REAL(KIND=8) :: ptiny
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     INTEGER(KIND=4) :: elength     ! the elementset length
     INTEGER(KIND=4) :: ielem, i, bcMask
     REAL(KIND=8) :: qlin, qquad, phixi, phieta, phizeta, delvm, delvp
@@ -2249,6 +2226,7 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8), PARAMETER :: ptiny = 1.e-36_RLK
     REAL(KIND=8) :: monoq_max_slope
     REAL(KIND=8) :: monoq_limiter_mult
@@ -2328,6 +2306,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:) :: p_new, bvc, pbvc, e_old
     REAL(KIND=8), DIMENSION(0:) ::  compression
     REAL(KIND=8), DIMENSION(0:) :: vnewc
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8)    :: pmin
     REAL(KIND=8)    :: p_cut
     REAL(KIND=8)    :: eosvmax
@@ -2380,6 +2359,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:) :: vnewc, work, delvc
     REAL(KIND=8)    :: pmin, p_cut,  e_cut, q_cut, emin
     REAL(KIND=8), DIMENSION(0:) :: qq, ql
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8)    :: rho0
     REAL(KIND=8)    :: eosvmax
     INTEGER(KIND=4) :: length
@@ -2508,6 +2488,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:) :: vnewc, enewc
     REAL(KIND=8), DIMENSION(0:) :: pnewc, pbvc
     REAL(KIND=8), DIMENSION(0:) :: bvc
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8) :: rho0
     REAL(KIND=8) :: ss4o3
     INTEGER      :: nz
@@ -2538,6 +2519,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8), DIMENSION(0:) :: vnewc
     INTEGER :: length
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8) :: e_cut, p_cut, ss4o3, q_cut
     REAL(KIND=8) :: eosvmax, eosvmin, pmin, emin, rho0
@@ -2649,7 +2631,7 @@ CONTAINS
     ENDDO
 
 
-    CALL CalcSoundSpeedForElems(vnewc, rho0, e_new, p_new,  &
+    CALL CalcSoundSpeedForElems(domain, vnewc, rho0, e_new, p_new,  &
                                 pbvc, bvc, ss4o3, length)
 
     DEALLOCATE(pbvc)
@@ -2679,6 +2661,7 @@ CONTAINS
     REAL(KIND=8)    :: eosvmin, eosvmax, vc
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: vnewc
     INTEGER(KIND=4) :: length, zn
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     length = domain%m_numElem
 
@@ -2735,6 +2718,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     ReAL(KIND=8)    :: v_cut, tmpV
     INTEGER(KIND=4) :: numElem, i
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     numElem = domain%m_numElem
 
@@ -2782,6 +2766,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8)    :: dtcourant
     INTEGER(KIND=4) :: COURANT_ELEM
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8) :: qqc, qqc2, dtf
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: dtcourant_per_thread
@@ -2862,6 +2847,7 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8) :: dthydro
     REAL(KIND=8) :: dvovmax, dtdvov
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: dthydro_per_thread
     INTEGER(KIND=4) :: hydro_elem
     INTEGER(KIND=4) :: threads, i, length, indx, thread_num
@@ -2964,6 +2950,7 @@ CONTAINS
 
     IMPLICIT NONE
     REAL(KIND=8) :: dat
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     CBRT = dat**(1.0_RLK/3.0_RLK)
 
@@ -2975,6 +2962,7 @@ CONTAINS
 
     IMPLICIT NONE
     REAL(KIND=8) ,DIMENSION(0:7) :: x, y, z
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8)  :: volume=0.0_RLK
 
