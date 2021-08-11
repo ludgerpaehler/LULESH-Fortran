@@ -4,7 +4,7 @@ SUBROUTINE AllocateNodalPersistent(domain, size)
 
   IMPLICIT NONE 
   INTEGER :: size
-  
+  TYPE :: domain
 
   ALLOCATE(domain%m_x(0:size-1))
   ALLOCATE(domain%m_y(0:size-1)) 
