@@ -350,12 +350,18 @@ DO i=0,edgeElems-1
    planeInc = i*edgeElems*edgeElems
    rowInc   = i*edgeElems
    DO j=0,edgeElems-1
-      domain%m_elemBC(planeInc+j*edgeElems)                 = IOR(domain%m_elemBC(planeInc+(j)*edgeElems), XI_M_SYMM)
-      domain%m_elemBC(planeInc+(j)*edgeElems+edgeElems-1)     = IOR(domain%m_elemBC(planeInc+(j)*edgeElems+edgeElems-1), XI_P_FREE)
-      domain%m_elemBC(planeInc+j)                               = IOR(domain%m_elemBC(planeInc+j),ETA_M_SYMM)
-      domain%m_elemBC(planeInc+j+edgeElems*edgeElems-edgeElems) = IOR(domain%m_elemBC(planeInc+j+edgeElems*edgeElems-edgeElems),ETA_P_FREE) 
-      domain%m_elemBC(rowInc+j)                                 = IOR(domain%m_elemBC(rowInc+j),ZETA_M_SYMM) 
-      domain%m_elemBC(rowInc+j+domElems-edgeElems*edgeElems)    = IOR(domain%m_elemBC(rowInc+j+domElems-edgeElems*edgeElems),ZETA_P_FREE)
+      domain%m_elemBC(planeInc+j*edgeElems)                     = &
+         IOR(domain%m_elemBC(planeInc+(j)*edgeElems), XI_M_SYMM)
+      domain%m_elemBC(planeInc+(j)*edgeElems+edgeElems-1)       = &
+         IOR(domain%m_elemBC(planeInc+(j)*edgeElems+edgeElems-1), XI_P_FREE)
+      domain%m_elemBC(planeInc+j)                               = &
+         IOR(domain%m_elemBC(planeInc+j),ETA_M_SYMM)
+      domain%m_elemBC(planeInc+j+edgeElems*edgeElems-edgeElems) = &
+         IOR(domain%m_elemBC(planeInc+j+edgeElems*edgeElems-edgeElems),ETA_P_FREE) 
+      domain%m_elemBC(rowInc+j)                                 = &
+         IOR(domain%m_elemBC(rowInc+j),ZETA_M_SYMM) 
+      domain%m_elemBC(rowInc+j+domElems-edgeElems*edgeElems)    = &
+         IOR(domain%m_elemBC(rowInc+j+domElems-edgeElems*edgeElems),ZETA_P_FREE)
    END DO
 END DO
 

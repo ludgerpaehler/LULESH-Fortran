@@ -626,6 +626,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:) :: pfx,pfy,pfz
     REAL(KIND=8), DIMENSION(0:) :: x, y, z
     INTEGER(KIND=4), PARAMETER :: RLK = 8
+    INTEGER(KIND=4) :: i
 
     DO i = 0, 7
       pfx(i) = 0.0_RLK
@@ -767,6 +768,7 @@ CONTAINS
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemNodes => NULL()
     INTEGER      :: lnode, gnode, count, start, elem, kk
     INTEGER      :: numNode, numElem8
+    INTEGER(KIND=4) :: i
 
     numElem8 = numElem * 8
     ALLOCATE(fx_elem(0:numElem8-1))
@@ -1398,7 +1400,10 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8),DIMENSION(0:) :: determ
     REAL(KIND=8) :: hgcoef
+
+    ! Hacky hacky
     INTEGER(KIND=4), PARAMETER :: RLK = 8
+    INTEGER(KIND=4), PARAMETER :: VolumeError = -1
 
     REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: dvdx
     REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: dvdy
@@ -1476,6 +1481,9 @@ CONTAINS
     REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: sigyy
     REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: sigzz
     REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: determ
+
+    ! Hacky hacky
+    INTEGER(KIND=4), PARAMETER :: VolumeError = -1
 
 
     numElem = domain%m_numElem
@@ -1860,7 +1868,10 @@ CONTAINS
     REAL(KIND=8)    :: deltatime
     REAL(KIND=8)    :: vdov, vdovthird
     INTEGER(KIND=4) :: numElem, k
+
+    ! Hacky hacky
     INTEGER(KIND=4), PARAMETER :: RLK = 8
+    INTEGER(KIND=4), PARAMETER :: VolumeError = -1
 
     numElem = domain%m_numElem
     IF (numElem > 0) THEN
@@ -2069,6 +2080,31 @@ CONTAINS
     REAL(KIND=8) :: qlin, qquad, phixi, phieta, phizeta, delvm, delvp
     REAL(KIND=8) :: norm, delvxxi, delvxeta, delvxzeta, rho
 
+    ! Hacky introduction of the necessary informationfor the boundary condition
+    INTEGER, PARAMETER :: XI_M        = z'003' ! 0x003
+    INTEGER, PARAMETER :: XI_M_SYMM   = z'001' ! 0x001
+    INTEGER, PARAMETER :: XI_M_FREE   = z'002' ! 0x002
+
+    INTEGER, PARAMETER :: XI_P        = z'00c' ! 0x00c
+    INTEGER, PARAMETER :: XI_P_SYMM   = z'004' ! 0x004
+    INTEGER, PARAMETER :: XI_P_FREE   = z'008' ! 0x008
+
+    INTEGER, PARAMETER :: ETA_M       = z'030' ! 0x030
+    INTEGER, PARAMETER :: ETA_M_SYMM  = z'010' ! 0x010
+    INTEGER, PARAMETER :: ETA_M_FREE  = z'020' ! 0x020
+
+    INTEGER, PARAMETER :: ETA_P       = z'0c0' ! 0x0c0
+    INTEGER, PARAMETER :: ETA_P_SYMM  = z'040' ! 0x040
+    INTEGER, PARAMETER :: ETA_P_FREE  = z'080' ! 0x080
+
+    INTEGER, PARAMETER :: ZETA_M      = z'300' ! 0x300
+    INTEGER, PARAMETER :: ZETA_M_SYMM = z'100' ! 0x100
+    INTEGER, PARAMETER :: ZETA_M_FREE = z'200' ! 0x200
+
+    INTEGER, PARAMETER :: ZETA_P      = z'c00' ! 0xc00
+    INTEGER, PARAMETER :: ZETA_P_SYMM = z'400' ! 0x400
+    INTEGER, PARAMETER :: ZETA_P_FREE = z'800' ! 0x800
+
 
     DO ielem = 0, elength-1
       i = domain%m_matElemlist(ielem)
@@ -2262,6 +2298,8 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8)    :: qstop
     INTEGER(KIND=4) :: numElem, idx, i
+
+    INTEGER(KIND=4), PARAMETER :: QStopError  = -2
 
     qstop = domain%m_qstop
     numElem = domain%m_numElem
@@ -2661,7 +2699,12 @@ CONTAINS
     REAL(KIND=8)    :: eosvmin, eosvmax, vc
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: vnewc
     INTEGER(KIND=4) :: length, zn
+
+    ! Hacky hacky
+    INTEGER(KIND=4) :: i
     INTEGER(KIND=4), PARAMETER :: RLK = 8
+    INTEGER(KIND=4), PARAMETER :: VolumeError = -1
+
 
     length = domain%m_numElem
 
