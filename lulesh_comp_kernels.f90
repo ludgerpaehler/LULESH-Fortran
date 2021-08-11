@@ -1,4 +1,4 @@
-MODULE LuleshKernels
+MODULE lulesh_comp_kernels
 
 IMPLICIT NONE
 PRIVATE 
@@ -178,6 +178,13 @@ PRIVATE
   PUBLIC :: CalcTimeConstraintsForElems
   PUBLIC :: LagrangeLeapFrog
   PUBLIC :: luabort
+
+  ! Define the publicly available functions
+  PUBLIC :: CBRT
+  PUBLIC :: CalcElemVolume
+  PUBLIC :: TRIPLE_PRODUCT
+  PUBLIC :: AreaFace
+  PUBLIC :: SUM4
 
 CONTAINS
 
@@ -2950,5 +2957,205 @@ CONTAINS
     WRITE(6,*) "ABORTING"
     STOP
   END SUBROUTINE luabort
+
+
+
+  REAL(KIND=8) FUNCTION CBRT(dat)
+
+    IMPLICIT NONE
+    REAL(KIND=8) :: dat
+
+    CBRT = dat**(1.0_RLK/3.0_RLK)
+
+  END FUNCTION CBRT
+
+
+
+  REAL(KIND=8) FUNCTION CalcElemVolume( x, y, z )
+
+    IMPLICIT NONE
+    REAL(KIND=8) ,DIMENSION(0:7) :: x, y, z
+
+    REAL(KIND=8)  :: volume=0.0_RLK
+
+  !!$REAL(KIND=8)  :: x0, x1, x2, x3, x4, x5, x6, x7
+  !!$REAL(KIND=8)  :: y0, y1, y2, y3, y4, y5, y6, y7
+  !!$REAL(KIND=8)  :: z0, z1, z2, z3, z4, z5, z6, z7
+
+    REAL(KIND=8) :: twelveth = (1.0_RLK)/(12.0_RLK)
+
+    REAL(KIND=8) :: dx61
+    REAL(KIND=8) :: dy61
+    REAL(KIND=8) :: dz61
+
+    REAL(KIND=8) :: dx70
+    REAL(KIND=8) :: dy70
+    REAL(KIND=8) :: dz70
+
+    REAL(KIND=8) :: dx63
+    REAL(KIND=8) :: dy63 
+    REAL(KIND=8) :: dz63
+
+    REAL(KIND=8) :: dx20 
+    REAL(KIND=8) :: dy20
+    REAL(KIND=8) :: dz20
+
+    REAL(KIND=8) :: dx50 
+    REAL(KIND=8) :: dy50
+    REAL(KIND=8) :: dz50
+
+    REAL(KIND=8) :: dx64
+    REAL(KIND=8) :: dy64
+    REAL(KIND=8) :: dz64
+
+    REAL(KIND=8) :: dx31
+    REAL(KIND=8) :: dy31 
+    REAL(KIND=8) :: dz31
+
+    REAL(KIND=8) :: dx72
+    REAL(KIND=8) :: dy72
+    REAL(KIND=8) :: dz72
+
+    REAL(KIND=8) :: dx43 
+    REAL(KIND=8) :: dy43
+    REAL(KIND=8) :: dz43
+
+    REAL(KIND=8) :: dx57
+    REAL(KIND=8) :: dy57
+    REAL(KIND=8) :: dz57
+
+    REAL(KIND=8) :: dx14
+    REAL(KIND=8) :: dy14 
+    REAL(KIND=8) :: dz14
+
+    REAL(KIND=8) :: dx25
+    REAL(KIND=8) :: dy25 
+    REAL(KIND=8) :: dz25
+
+
+    dx61 = x(6) - x(1)
+    dy61 = y(6) - y(1)
+    dz61 = z(6) - z(1)
+
+    dx70 = x(7) - x(0)
+    dy70 = y(7) - y(0)
+    dz70 = z(7) - z(0)
+
+    dx63 = x(6) - x(3)
+    dy63 = y(6) - y(3)
+    dz63 = z(6) - z(3)
+
+    dx20 = x(2) - x(0)
+    dy20 = y(2) - y(0)
+    dz20 = z(2) - z(0)
+
+    dx50 = x(5) - x(0)
+    dy50 = y(5) - y(0)
+    dz50 = z(5) - z(0)
+
+    dx64 = x(6) - x(4)
+    dy64 = y(6) - y(4)
+    dz64 = z(6) - z(4)
+
+    dx31 = x(3) - x(1)
+    dy31 = y(3) - y(1)
+    dz31 = z(3) - z(1)
+
+    dx72 = x(7) - x(2)
+    dy72 = y(7) - y(2)
+    dz72 = z(7) - z(2)
+
+    dx43 = x(4) - x(3)
+    dy43 = y(4) - y(3)
+    dz43 = z(4) - z(3)
+
+    dx57 = x(5) - x(7)
+    dy57 = y(5) - y(7)
+    dz57 = z(5) - z(7)
+
+    dx14 = x(1) - x(4)
+    dy14 = y(1) - y(4)
+    dz14 = z(1) - z(4)
+
+    dx25 = x(2) - x(5)
+    dy25 = y(2) - y(5)
+    dz25 = z(2) - z(5)
+
+    volume =  TRIPLE_PRODUCT(dx31 + dx72, dx63, dx20,   &
+                             dy31 + dy72, dy63, dy20,   &
+                             dz31 + dz72, dz63, dz20) + &
+              TRIPLE_PRODUCT(dx43 + dx57, dx64, dx70,   &
+                             dy43 + dy57, dy64, dy70,   &
+                             dz43 + dz57, dz64, dz70) + &
+              TRIPLE_PRODUCT(dx14 + dx25, dx61, dx50,   &
+                             dy14 + dy25, dy61, dy50,   &
+                             dz14 + dz25, dz61, dz50)
+
+    volume = volume*twelveth
+
+
+    CalcElemVolume=volume
+
+
+  END FUNCTION CalcElemVolume
+
+
+
+  REAL(KIND=8) FUNCTION TRIPLE_PRODUCT(x1, y1, z1, x2, y2, z2, x3, y3, z3)
+
+    REAL(KIND=8) :: x1, y1, z1, x2, y2, z2, x3, y3, z3
+
+    TRIPLE_PRODUCT = ((x1)*((y2)*(z3) - (z2)*(y3)) + (x2)*((z1)*(y3)  &
+                    - (y1)*(z3)) + (x3)*((y1)*(z2) - (z1)*(y2)))
+
+    RETURN
+
+  END FUNCTION TRIPLE_PRODUCT
+
+
+
+  FUNCTION AreaFace( x0, x1, x2, x3,  &
+                   y0, y1, y2, y3,  &
+                   z0, z1, z2, z3  ) RESULT(area)
+
+
+    IMPLICIT NONE
+    REAL(KIND=8)  :: x0, x1, x2, x3
+    REAL(KIND=8)  :: y0, y1, y2, y3
+    REAL(KIND=8)  :: z0, z1, z2, z3
+
+    REAL(KIND=8) :: fx, fy, fz
+    REAL(KIND=8) :: gx, gy, gz
+    REAL(KIND=8) :: area
+
+    fx = (x2 - x0) - (x3 - x1)
+    fy = (y2 - y0) - (y3 - y1)
+    fz = (z2 - z0) - (z3 - z1)
+    gx = (x2 - x0) + (x3 - x1)
+    gy = (y2 - y0) + (y3 - y1)
+    gz = (z2 - z0) + (z3 - z1)
+
+    area =                             &
+      (fx * fx + fy * fy + fz * fz) *  &
+      (gx * gx + gy * gy + gz * gz) -  &
+      (fx * gx + fy * gy + fz * gz) *  &
+      (fx * gx + fy * gy + fz * gz)
+
+    RETURN
+
+  END FUNCTION AreaFace
+
+
+
+  REAL(KIND=8) FUNCTION SUM4(a, b, c, d)
+
+    IMPLICIT NONE 
+    REAL(KIND=8) :: a, b, c, d
+
+    SUM4 = a + b + c + d
+
+    RETURN
+
+  END FUNCTION SUM4
 
 END MODULE
