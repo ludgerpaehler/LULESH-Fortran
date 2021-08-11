@@ -1,4 +1,4 @@
-MODULE
+MODULE lulesh_domain
 
 CONTAINS
 
@@ -131,5 +131,4 @@ CONTAINS
     
     END TYPE domain_type
 
-
-END MODULE
+END MODULE lulesh_domain
