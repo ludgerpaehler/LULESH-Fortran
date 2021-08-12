@@ -295,7 +295,7 @@ CONTAINS
   SUBROUTINE AllocateNodesets(domain, size)
     IMPLICIT NONE 
     INTEGER :: size
-    TYPE(domain_type), INTENT(INOUT) :: domain !<- A little unsure here
+    TYPE(domain_type), INTENT(INOUT) :: domain
     ALLOCATE(domain%m_symmX(0:size-1))
     ALLOCATE(domain%m_symmY(0:size-1))
     ALLOCATE(domain%m_symmZ(0:size-1))
@@ -353,10 +353,15 @@ CONTAINS
           domain%m_nodeElemCount(m) = domain%m_nodeElemCount(m) + 1
     END DO
 
+    ! Double-check that `i` here is not out of bounds
     clSize = SIZE(domain%m_nodeElemCornerList)
     DO i=0, clSize-1
        clv=domain%m_nodeElemCornerList(i)
        IF ((clv.LT.0).OR.(clv.GT.numElem*8))THEN
+          PRINT*, "ERROR: clv = ", clv
+          PRINT*, "ERROR: clv.LT.0 = ", (clv.LT.0)
+          PRINT*, "ERROR: numElem*8 = ", numElem*8
+          PRINT*, "ERROR: clv.GT.numElem*8 = ", (clv.GT.numElem*8)
           PRINT*,"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"
           CALL luabort(1)
        END IF
@@ -509,7 +514,7 @@ CONTAINS
     fjzet = .125 * ( (z6-z0) - (z5-z3) + (z7-z1) - (z4-z2) )
     fjzze = .125 * ( (z6-z0) + (z5-z3) + (z7-z1) + (z4-z2) )
 
-  ! compute cofactors
+    ! Compute cofactors
     cjxxi =    (fjyet * fjzze) - (fjzet * fjyze)
     cjxet =  - (fjyxi * fjzze) + (fjzxi * fjyze)
     cjxze =    (fjyxi * fjzet) - (fjzxi * fjyet)
@@ -522,9 +527,9 @@ CONTAINS
     cjzet =  - (fjxxi * fjyze) + (fjyxi * fjxze)
     cjzze =    (fjxxi * fjyet) - (fjyxi * fjxet)
 
-  ! calculate partials :
-  !     this need only be done for l = 0,1,2,3   since , by symmetry ,
-  !     (6,7,4,5) = - (0,1,2,3) .
+    ! calculate partials :
+    !     this need only be done for l = 0,1,2,3   since , by symmetry ,
+    !     (6,7,4,5) = - (0,1,2,3) .
     b(0,0) =   -  cjxxi  -  cjxet  -  cjxze
     b(1,0) =      cjxxi  -  cjxet  -  cjxze
     b(2,0) =      cjxxi  +  cjxet  -  cjxze
@@ -552,7 +557,7 @@ CONTAINS
     b(6,2) = -b(2,0)
     b(7,2) = -b(2,1)
 
-  ! calculate jacobian determinant (volume)
+    ! Calculate jacobian determinant (volume)
     el_volume = 8.0_RLK * ( fjxet * cjxet + fjyet * cjyet + fjzet * cjzet)
 
   END SUBROUTINE CalcElemShapeFunctionDerivatives
@@ -635,42 +640,42 @@ CONTAINS
       pfz(i) = 0.0_RLK
     ENDDO
 
-  ! evaluate face one: nodes 0, 1, 2, 3
+    ! Evaluate face one: nodes 0, 1, 2, 3
     CALL SumElemFaceNormal(pfx(0), pfy(0), pfz(0),              &
                            pfx(1), pfy(1), pfz(1),              &
                            pfx(2), pfy(2), pfz(2),              &
                            pfx(3), pfy(3), pfz(3),              &
                            x(0), y(0), z(0), x(1), y(1), z(1),  &
                            x(2), y(2), z(2), x(3), y(3), z(3))
-  ! evaluate face two: nodes 0, 4, 5, 1 */
+    ! Evaluate face two: nodes 0, 4, 5, 1 */
     CALL SumElemFaceNormal(pfx(0), pfy(0), pfz(0),              &
                            pfx(4), pfy(4), pfz(4),              &
                            pfx(5), pfy(5), pfz(5),              &
                            pfx(1), pfy(1), pfz(1),              &
                            x(0), y(0), z(0), x(4), y(4), z(4),  &
                            x(5), y(5), z(5), x(1), y(1), z(1))
-  ! evaluate face three: nodes 1, 5, 6, 2 */
+    ! Evaluate face three: nodes 1, 5, 6, 2 */
     CALL SumElemFaceNormal(pfx(1), pfy(1), pfz(1),              &
                            pfx(5), pfy(5), pfz(5),              &
                            pfx(6), pfy(6), pfz(6),              &
                            pfx(2), pfy(2), pfz(2),              &
                            x(1), y(1), z(1), x(5), y(5), z(5),  &
                            x(6), y(6), z(6), x(2), y(2), z(2))
-  ! evaluate face four: nodes 2, 6, 7, 3 */
+    ! Evaluate face four: nodes 2, 6, 7, 3 */
     CALL SumElemFaceNormal(pfx(2), pfy(2), pfz(2),              &
                            pfx(6), pfy(6), pfz(6),              &
                            pfx(7), pfy(7), pfz(7),              &
                            pfx(3), pfy(3), pfz(3),              &
                            x(2), y(2), z(2), x(6), y(6), z(6),  &
                            x(7), y(7), z(7), x(3), y(3), z(3))
-  ! evaluate face five: nodes 3, 7, 4, 0 */
+    ! Evaluate face five: nodes 3, 7, 4, 0 */
     CALL SumElemFaceNormal(pfx(3), pfy(3), pfz(3),              &
                            pfx(7), pfy(7), pfz(7),              &
                            pfx(4), pfy(4), pfz(4),              &
                            pfx(0), pfy(0), pfz(0),              &
                            x(3), y(3), z(3), x(7), y(7), z(7),  &
                            x(4), y(4), z(4), x(0), y(0), z(0))
-  ! evaluate face six: nodes 4, 7, 6, 5 */
+    ! Evaluate face six: nodes 4, 7, 6, 5 */
     CALL SumElemFaceNormal(pfx(4), pfy(4), pfz(4),              &
                            pfx(7), pfy(7), pfz(7),              &
                            pfx(6), pfy(6), pfz(6),              &
@@ -752,8 +757,8 @@ CONTAINS
 
 
   SUBROUTINE IntegrateStressForElems(domain, numElem, sigxx, sigyy, sigzz, determ)
-    IMPLICIT NONE
     USE OMP_LIB
+    IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER      :: numElem
@@ -773,9 +778,8 @@ CONTAINS
     INTEGER(KIND=4) :: i
     INTEGER(KIND=OMP_integer_kind) :: numthreads
 
-    ! A little hacky for now, there should be a more elegant version to do this!
 #if _OPENMP
-      numthreads = CALL OMP_GET_MAX_THREADS()
+      numthreads = OMP_GET_MAX_THREADS()
 #else
       numthreads = 1
 #endif
@@ -785,7 +789,7 @@ CONTAINS
     ALLOCATE(fy_elem(0:numElem8-1))
     ALLOCATE(fz_elem(0:numElem8-1))
 
-    ! loop over all elements
+    ! loop over all elements  -> OMP issue happening here
 !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
     DO kk=0, numElem-1
       elemNodes => domain%m_nodelist(kk*8:)
@@ -814,7 +818,7 @@ CONTAINS
     ! Not entirely sure, how I am supposed to treat this one here
     numNode = domain%m_numNode
 
-!$OMP PARALLEL DO FIRSTPRIVATE(numNode)
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(numNode)
     DO gnode=0, numNode-1
       count = domain%m_nodeElemCount(gnode)
       start = domain%m_nodeElemStart(gnode)
@@ -831,11 +835,11 @@ CONTAINS
       domain%m_fy(gnode) = fy
       domain%m_fz(gnode) = fz
     ENDDO
+    !  !$OMP END PARALLEL DO
 
     DEALLOCATE(fz_elem)
     DEALLOCATE(fy_elem)
     DEALLOCATE(fx_elem)
-!$OMP END PARALLEL DO
 
   END SUBROUTINE IntegrateStressForElems
 
@@ -1180,8 +1184,8 @@ CONTAINS
   ! *               force.
   ! *
   ! *************************************************
-    IMPLICIT NONE
     USE OMP_LIB
+    IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8), DIMENSION(0:) :: determ
@@ -1206,9 +1210,8 @@ CONTAINS
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode => NULL()
     INTEGER :: numthreads
 
-    ! A little hacky for now, there should be a more elegant version to do this!
 #if _OPENMP
-      numthreads = CALL OMP_GET_MAX_THREADS()
+      numthreads = OMP_GET_MAX_THREADS()
 #else
       numthreads = 1
 #endif
@@ -1257,7 +1260,7 @@ CONTAINS
   ! *************************************************
   ! compute the hourglass modes
 
-!$OMP PARALLEL DO FIRSTPRIVATE(numElem, hourg)
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem, hourg)
     DO i2=0, numElem-1
 
       elemToNode => domain%m_nodelist(i2*8:)
@@ -1391,11 +1394,14 @@ CONTAINS
       fz_local(6) = hgfz(6)
       fz_local(7) = hgfz(7)
     ENDDO
-!$OMP END PARALLEL DO
+    !  !$OMP END PARALLEL DO
 
     numNode = domain%m_numNode  !-> How does this fit into the picture here?
 
-!$OMP PARALLEL DO FIRSTPRIVATE(numNode)
+    ! Valid argument can be made that this is where the seg-fault happens
+    ! But still contending with errors coming out of the nodeElemCornerList's indexing
+
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(numNode)
     DO gnode=0, numNode-1
       count = domain%m_nodeElemCount(gnode)
       start = domain%m_nodeElemStart(gnode)
@@ -1412,11 +1418,11 @@ CONTAINS
       domain%m_fy(gnode) = domain%m_fy(gnode) + fy
       domain%m_fz(gnode) = domain%m_fz(gnode) + fz
     ENDDO
+    !  !$OMP END PARALLEL DO
 
     DEALLOCATE(fz_elem)
     DEALLOCATE(fy_elem)
     DEALLOCATE(fx_elem)
-!$OMP END PARALLEL DO
 
   END SUBROUTINE CalcFBHourglassForceForElems
 
@@ -1453,8 +1459,8 @@ CONTAINS
     ALLOCATE(y8n(0:numElem8-1))
     ALLOCATE(z8n(0:numElem8-1))
 
-!$OMP PARALLEL DO FIRSTPRIVATE(numElem)
-  ! start loop over elements
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
+    ! start loop over elements
     DO i=0, numElem-1
       elemToNode => domain%m_nodelist(i*8:)
       CALL CollectDomainNodesToElemNodes(domain, elemToNode, x1, y1, z1)
@@ -1479,7 +1485,7 @@ CONTAINS
         CALL luabort(VolumeError)
       ENDIF
     ENDDO
-!$OMP END PARALLEL DO
+    !  !$OMP END PARALLEL DO
 
     IF ( hgcoef > (0.0_RLK) ) THEN
       CALL CalcFBHourglassForceForElems(domain, determ, x8n, y8n, &
@@ -1524,14 +1530,14 @@ CONTAINS
       ALLOCATE(sigzz(0:numElem-1))
       ALLOCATE(determ(0:numElem-1))
 
-  !   Sum contributions to total stress tensor
+      ! Sum contributions to total stress tensor
       CALL InitStressTermsForElems(domain, numElem, sigxx, sigyy, sigzz)
 
-  !   call elemlib stress integration loop to produce nodal forces from
-  !   material stresses.
+      ! Call elemlib stress integration loop to produce nodal forces from
+      !   material stresses.
       CALL IntegrateStressForElems(domain, numElem, sigxx, sigyy, sigzz, determ)
 
-  !   check for negative element volume and abort if found
+      ! Check for negative element volume and abort if found
 !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
       DO k=0, numElem-1
          IF (determ(k) <= 0.0_RLK) THEN
@@ -1570,11 +1576,11 @@ CONTAINS
     ENDDO
 !$OMP END PARALLEL DO
 
-  ! Calcforce calls partial, force, hourq
+    ! Calcforce calls partial, force, hourq
     CALL CalcVolumeForceForElems(domain)
 
-  ! Calculate Nodal Forces at domain boundaries
-  ! problem->commSBN->Transfer(CommSBN::forces)
+    ! Calculate Nodal Forces at domain boundaries
+    !   problem->commSBN->Transfer(CommSBN::forces)
 
   END SUBROUTINE CalcForceForNodes
 
@@ -1697,7 +1703,7 @@ CONTAINS
     delt  = domain%m_deltatime
     u_cut = domain%m_u_cut
 
-    ! time of boundary condition evaluation is beginning of step for force and
+    ! Time of boundary condition evaluation is beginning of step for force and
     ! acceleration boundary conditions.
     CALL CalcForceForNodes(domain)
 
@@ -1858,7 +1864,7 @@ CONTAINS
 
     detJ = 0.0_RLK
 
-!$OMP PARALLEL DO FIRSTPRIVATE(numElem, dt)
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem, dt)
     ! Loop over all elements
     DO k = 0, numElem-1
       elemToNode => domain%m_nodelist(k*8:)
@@ -1907,7 +1913,7 @@ CONTAINS
       domain%m_dyy(k) = D(1);
       domain%m_dzz(k) = D(2);
     ENDDO
-!$OMP END PARALLEL DO
+    !  !$OMP END PARALLEL DO
 
   END SUBROUTINE CalcKinematicsForElems
 
@@ -1977,7 +1983,7 @@ CONTAINS
 
     numElem = domain%m_numElem
 
-!$OMP PARALLEL DO FIRSTPRIVATE(numElem)
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
     DO i=0, numElem-1
 
       elemToNode => domain%m_nodelist(i*8:)
@@ -2113,7 +2119,7 @@ CONTAINS
 
       domain%m_delv_eta(i) = ax*dxv + ay*dyv + az*dzv ;
     ENDDO
-!$OMP END PARALLEL DO
+    !  !$OMP END PARALLEL DO
 
   END SUBROUTINE CalcMonotonicQGradientsForElems
 
@@ -2161,7 +2167,7 @@ CONTAINS
     INTEGER, PARAMETER :: ZETA_P_FREE = z'800' ! 0x800
 
 
-!$OMP PARALLEL DO FIRSTPRIVATE(qlc_monoq, qqc_monoq, monoq_limiter_mult, monoq_max_slope, ptiny)
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(qlc_monoq, qqc_monoq, monoq_limiter_mult, monoq_max_slope, ptiny)
     DO ielem = 0, elength-1
       i = domain%m_matElemlist(ielem)
       bcMask = domain%m_elemBC(i)
@@ -2309,7 +2315,7 @@ CONTAINS
       domain%m_qq(i) = qquad
       domain%m_ql(i) = qlin
     ENDDO
-!$OMP END PARALLEL DO
+    !  !$OMP END PARALLEL DO
 
   END SUBROUTINE CalcMonotonicQRegionForElems
 
@@ -2563,7 +2569,7 @@ CONTAINS
     CALL CalcPressureForElems(p_new, bvc, pbvc, e_new, compression,  &
                               vnewc, pmin, p_cut, eosvmax, length)
 
-!$OMP PARALLEL DO FIRSTPRIVATE(length, rho0, q_cut)
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(length, rho0, q_cut)
     DO i = 0, length-1
       IF ( delvc(i) <= (0.0_RLK) ) THEN
         ssc = ( pbvc(i) * e_new(i)  &
@@ -2580,7 +2586,7 @@ CONTAINS
         if (ABS(q_new(i)) < q_cut) q_new(i) = (0.0_RLK)
       ENDIF
     ENDDO
-!$OMP END PARALLEL DO
+    !  !$OMP END PARALLEL DO
 
     DEALLOCATE(pHalfStep)
 
@@ -2606,7 +2612,7 @@ CONTAINS
     REAL(KIND=8) :: ssTmp
     INTEGER      :: i, iz
 
-!$OMP PARALLEL DO FIRSTPRIVATE(rho0, ss4o3)
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(rho0, ss4o3)
     DO i = 0, nz - 1
       iz = domain%m_matElemlist(i)
       ssTmp = (pbvc(i) * enewc(i) + vnewc(i) * vnewc(i) *  &
@@ -2618,7 +2624,7 @@ CONTAINS
       ENDIF
       domain%m_ss(iz) = ssTmp
     ENDDO
-!$OMP END PARALLEL DO
+    !  !$OMP END PARALLEL DO
 
   END SUBROUTINE CalcSoundSpeedForElems
 
@@ -2688,7 +2694,7 @@ CONTAINS
     ENDDO
 !$OMP END PARALLEL DO
 
-  ! Check for v > eosvmax or v < eosvmin
+    ! Check for v > eosvmax or v < eosvmin
     IF ( eosvmin /= (0.0_RLK) ) THEN
 !$OMP PARALLEL DO FIRSTPRIVATE(length, eosvmin)
       DO i = 0, length-1
@@ -2710,12 +2716,13 @@ CONTAINS
 !$OMP END PARALLEL DO
     ENDIF
 
-!$OMP PARALLEL DO FIRSTPRIVATE(length)
+    ! Is the problem the domain%matElemList?
+    !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
     DO i = 0, length-1
       zidx = domain%m_matElemlist(i)
       work(i) = (0.0_RLK)
     ENDDO
-!$OMP END PARALLEL DO
+    !  !$OMP END PARALLEL DO
 
     CALL CalcEnergyForElems(p_new, e_new, q_new, bvc, pbvc,          &
                             p_old, e_old,  q_old, compression,       &
@@ -2773,7 +2780,7 @@ CONTAINS
     length = domain%m_numElem
 
     IF (length /= 0) THEN
-  !   Expose all of the variables needed for material evaluation
+      ! Expose all of the variables needed for material evaluation
       eosvmin = domain%m_eosvmin
       eosvmax = domain%m_eosvmax
       ALLOCATE(vnewc(0:length-1))
@@ -2781,7 +2788,7 @@ CONTAINS
 !$OMP PARALLEL DO FIRSTPRIVATE(length)
       DO i = 0, length-1
         zn = domain%m_matElemlist(i)
-        CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
+        !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
         vnewc(i) = domain%m_vnew(zn)
       ENDDO
 !$OMP END PARALLEL DO
@@ -2802,10 +2809,11 @@ CONTAINS
 !$OMP END PARALLEL DO
       ENDIF
 
-!$OMP PARALLEL DO FIRSTPRIVATE(length)
+      ! combined3.ll as the error file
+      !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
       DO i = 0, length-1
         zn = domain%m_matElemlist(i)
-        CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
+        !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
         vc = domain%m_v(zn)
         IF (eosvmin /= (0.0_RLK)) THEN
           IF (vc < eosvmin) vc = eosvmin
@@ -2817,7 +2825,7 @@ CONTAINS
           CALL luabort(VolumeError)
         ENDIF
       ENDDO
-!$OMP END PARALLEL DO
+      !  !$OMP END PARALLEL DO
 
       CALL EvalEOSForElems(domain, vnewc, length)
 
@@ -2841,7 +2849,7 @@ CONTAINS
 
     IF (numElem /= 0) THEN
       v_cut = domain%m_v_cut
-!$OMP PARALLEL DO FIRSTPRIVATE(length, v_cut)
+!$OMP PARALLEL DO FIRSTPRIVATE(numElem, v_cut)
       DO i = 0, numElem - 1
         tmpV = domain%m_vnew(i)
 
@@ -2879,25 +2887,24 @@ CONTAINS
 
 
   SUBROUTINE CalcCourantConstraintForElems(domain)
-    IMPLICIT NONE
     USE OMP_LIB
+    IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8)    :: dtcourant
     INTEGER(KIND=4) :: COURANT_ELEM
+    INTEGER(KIND=4) :: threads, i
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8) :: qqc, dtf
-    INTEGER(KIND=4) :: length = domain%m_numElem
 
-      INTEGER(KIND=4), DIMENSION(:), ALLOCATABLE :: courant_elem_per_thread
-      REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: dtcourant_per_thread
+    INTEGER(KIND=4), DIMENSION(:), ALLOCATABLE :: courant_elem_per_thread
+    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: dtcourant_per_thread
 
     INTEGER(KIND=4) :: length
     REAL(KIND=8) :: qqc2
     REAL(KIND=8) :: dtcourant_tmp
     INTEGER(KIND=4) :: indx, thread_num
-    INTEGER(KIND=4) :: COURANT_ELEM
 
 
     length = domain%m_numElem
@@ -2905,6 +2912,7 @@ CONTAINS
 #if _OPENMP
       threads = OMP_GET_MAX_THREADS()
 #else
+      ! threads = 1 would be my expected value here
       threads = 1_4
 #endif
 
@@ -2914,7 +2922,7 @@ CONTAINS
     qqc = domain%m_qqc
 
 
-!$OMP PARALLEL FIRSTPRIVATE(length, qqc) PRIVATE(qqc2, dtcourant_tmp, indx, thread_num, COURANT_ELEM)
+    !  !$OMP PARALLEL FIRSTPRIVATE(length, qqc) PRIVATE(qqc2, dtcourant_tmp, indx, thread_num, COURANT_ELEM)
     qqc2 = (64.0_RLK) * qqc * qqc
 
     dtcourant_tmp = domain%m_dtcourant
@@ -2926,7 +2934,7 @@ CONTAINS
       thread_num = 0_4
 #endif
 
-!$OMP DO
+    !  !$OMP DO
     DO i = 0, length-1
       indx = domain%m_matElemlist(i)
 
@@ -2941,9 +2949,9 @@ CONTAINS
       dtf = SQRT(dtf)
       dtf = domain%m_arealg(indx) / dtf
 
-  !   determine minimum timestep with its corresponding elem
+      ! Determine minimum timestep with its corresponding elem
       IF (domain%m_vdov(indx) /= (0.0_RLK)) THEN
-  !     For sequential run (non OpenMP, replace line above with next line.
+        ! For sequential run (non OpenMP, replace line above with next line.
         IF ( dtf < dtcourant_tmp ) THEN
           dtcourant_tmp = dtf
           COURANT_ELEM = indx
@@ -2951,12 +2959,11 @@ CONTAINS
       ENDIF
 
     ENDDO
-!$OMP END DO
+    !  !$OMP END DO
 
-  dtcourant_per_thread(thread_num) = dtcourant_tmp
-  courant_elem_per_thread(thread_num) = courant_elem
-
-!$OMP END PARALLEL
+    dtcourant_per_thread(thread_num) = dtcourant_tmp
+    courant_elem_per_thread(thread_num) = courant_elem
+    !  !$OMP END PARALLEL
 
     DO i = 1, threads-1
       IF(dtcourant_per_thread(i) < dtcourant_per_thread(0)) THEN
@@ -2965,8 +2972,8 @@ CONTAINS
       ENDIF
     ENDDO
 
-  ! Don't try to register a time constraint if none of the elements
-  ! were active
+    ! Don't try to register a time constraint if none of the elements
+    ! were active
     IF (courant_elem_per_thread(0) /= -1) THEN
       domain%m_dtcourant = dtcourant_per_thread(0)
     ENDIF
@@ -2981,8 +2988,8 @@ CONTAINS
 
 
   SUBROUTINE CalcHydroConstraintForElems(domain)
+    !  USE OMP_LIB
     IMPLICIT NONE
-    USE OMP_LIB
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8) :: dthydro
@@ -2994,13 +3001,12 @@ CONTAINS
     INTEGER(KIND=4), DIMENSION(:), ALLOCATABLE :: hydro_elem_per_thread
     INTEGER(KIND=4) :: indx, thread_num, i
     REAL(KIND=8) :: dthydro_tmp
-    REAL(KIND=8) :: hydro_elem
 
-#if _OPENMP
-      threads = OMP_GET_MAX_THREADS()
-#else
-      threads = 1_4
-#endif
+    !  #if _OPENMP
+    !        threads = OMP_GET_MAX_THREADS()
+    !  #else
+    !        threads = 1_4
+    !  #endif
 
 
     dvovmax = domain%m_dvovmax
@@ -3012,20 +3018,20 @@ CONTAINS
     ALLOCATE(hydro_elem_per_thread(0:threads-1))
 
 
-!$OMP PARALLEL FIRSTPRIVATE(length, dvovmax) PRIVATE(indx, thread_num, i, dthydro_tmp, hydro_elem)
+    !  !$OMP PARALLEL FIRSTPRIVATE(length, dvovmax) PRIVATE(indx, thread_num, i, dthydro_tmp, hydro_elem)
 
-#if _OPENMP
-      thread_num = OMP_GET_THREAD_NUM()
-#else
-      thread_num = 0_4
-#endif
+    !  #if _OPENMP
+    !        thread_num = OMP_GET_THREAD_NUM()
+    !  #else
+    !        thread_num = 0_4
+    !  #endif
     dthydro_tmp = domain%m_dthydro
     hydro_elem = -1
 
-!$OMP DO
+    !  !$OMP DO
     DO i = 0, length-1
       indx = domain%m_matElemlist(i)
-      CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
+      !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
       IF (domain%m_vdov(indx) /= (0.0_RLK)) THEN
         dtdvov = dvovmax / (ABS(domain%m_vdov(indx))+(1.e-20_RLK))
         IF ( dthydro_tmp > dtdvov ) THEN
@@ -3034,12 +3040,11 @@ CONTAINS
         ENDIF
       ENDIF
     ENDDO
-!$OMP END DO
+    !  !$OMP END DO
 
     dthydro_per_thread(thread_num) = dthydro_tmp
     hydro_elem_per_thread(thread_num) = hydro_elem
-      
-!$OMP END PARALLEL
+    !  !$OMP END PARALLEL
 
     DO i = 1, threads-1
       IF (dthydro_per_thread(i) < dthydro_per_thread(0)) THEN
