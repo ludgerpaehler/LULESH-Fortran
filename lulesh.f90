@@ -97,6 +97,7 @@ INTEGER(KIND=4), PARAMETER :: RLK = 8
 
 ! Start of main
 TYPE(domain_type) :: domain
+TYPE(domain_type) :: grad_domain  ! Datastruct to store the gradients in
 INTEGER :: edgeElems 
 INTEGER :: edgeNodes
 REAL(KIND=8) :: tx, ty, tz 
@@ -149,9 +150,9 @@ REAL(KIND=8) :: MaxRelDiff   = 0.0_RLK
 REAL(KIND=8) :: AbsDiff, RelDiff
 
 
-CALL GETARG(1, arg)
-READ(arg,*) edgeElems
-
+!CALL GETARG(1, arg)
+!READ(arg,*) edgeElems
+edgeElems = 15  ! Fixed for debugging purposes
 edgeNodes = edgeElems+1
 
 ! get run options to measure various metrics 
@@ -171,13 +172,19 @@ domain%m_numNode = edgeNodes*edgeNodes*edgeNodes
 domElems = domain%m_numElem 
 
 
-! allocate field memory
-
+! allocate field memory for the domain
 CALL AllocateElemPersistent(domain, domain%m_numElem)
 CALL AllocateElemTemporary (domain, domain%m_numElem) 
 
 CALL AllocateNodalPersistent(domain, domain%m_numNode) 
-CALL AllocateNodesets(domain, edgeNodes*edgeNodes) 
+CALL AllocateNodesets(domain, edgeNodes*edgeNodes)
+
+! Allocate field memory for the grad domain
+CALL AllocateElemPersistent(grad_domain, domain%m_numElem)
+CALL AllocateElemTemporary (grad_domain, domain%m_numElem) 
+
+CALL AllocateNodalPersistent(grad_domain, domain%m_numNode) 
+CALL AllocateNodesets(grad_domain, edgeNodes*edgeNodes)
 
 ! initialize nodal coordinates 
 nidx = 0
@@ -230,6 +237,7 @@ END DO
 NULLIFY(localNode)
 
 CALL AllocateNodeElemIndexes(domain)
+CALL AllocateNodeElemIndexes(grad_domain)
 
 !Create a material IndexSet (entire domain same material for now)
 DO i=0, domElems-1
@@ -373,11 +381,13 @@ CALL CPU_TIME(starttim)
 
 DO
    call TimeIncrement(domain)
-   CALL LagrangeLeapFrog(domain)
+   ! CALL LagrangeLeapFrog(domain)
+   ! CALL LagrangeLeapFrog(grad_domain)
+   CALL __ENZYME_AUTODIFF(LagrangeLeapFrog, domain, grad_domain)
 
-#ifdef LULESH_SHOW_PROGRESS
-   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
-#endif
+!#ifdef LULESH_SHOW_PROGRESS
+!   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
+!#endif
 
    IF(domain%m_time >= domain%m_stoptime) EXIT
 END DO
@@ -431,3 +441,6 @@ PRINT *,""
  PRINT *,""
 
 END PROGRAM lulesh
+
+
+

@@ -439,11 +439,13 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:) :: sigzz
     INTEGER(KIND=4) :: ii
 
+!$OMP PARALLEL DO FIRSTPRIVATE(numElem)
     DO ii = 0, numElem-1
       sigxx(ii) =  - domain%m_p(ii) - domain%m_q(ii)
       sigyy(ii) =  - domain%m_p(ii) - domain%m_q(ii)
       sigzz(ii) =  - domain%m_p(ii) - domain%m_q(ii)
     ENDDO
+!$OMP END PARALLEL DO
 
  END SUBROUTINE InitStressTermsForElems
 
@@ -2716,6 +2718,7 @@ CONTAINS
 
       DO i = 0, length-1
         zn = domain%m_matElemlist(i)
+        CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
         vnewc(i) = domain%m_vnew(zn)
       ENDDO
 
@@ -2733,6 +2736,7 @@ CONTAINS
 
       DO i = 0, length-1
         zn = domain%m_matElemlist(i)
+        CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
         vc = domain%m_v(zn)
         IF (eosvmin /= (0.0_RLK)) THEN
           IF (vc < eosvmin) vc = eosvmin
@@ -2905,6 +2909,8 @@ CONTAINS
   ! For sequential run (non OpenMP, replace line above with next line.
     threads = (1_4)
 
+    ! CALL __ENZYME_INTEGER(hydro_elem)
+
     ALLOCATE(dthydro_per_thread(0:threads-1))
     ALLOCATE(hydro_elem_per_thread(0:threads-1))
 
@@ -2915,7 +2921,8 @@ CONTAINS
 
 
     DO i = 0, length-1
-      indx = domain%m_matElemlist(i) ;
+      indx = domain%m_matElemlist(i)
+      CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
       IF (domain%m_vdov(indx) /= (0.0_RLK)) THEN
         dtdvov = dvovmax / (ABS(domain%m_vdov(indx))+(1.e-20_RLK))
   !     For sequential run (non OpenMP, replace line above with next line.
