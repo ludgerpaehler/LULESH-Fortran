@@ -396,9 +396,9 @@ CALL CPU_TIME(starttim)
 
 DO
    call TimeIncrement(domain)
-   ! CALL LagrangeLeapFrog(domain)
+   CALL LagrangeLeapFrog(domain)
    ! CALL LagrangeLeapFrog(grad_domain)
-   CALL __ENZYME_AUTODIFF(LagrangeLeapFrog, domain, grad_domain)
+   !CALL __ENZYME_AUTODIFF(LagrangeLeapFrog, domain, grad_domain)
 
 !#ifdef LULESH_SHOW_PROGRESS
 !   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
