@@ -170,7 +170,7 @@ domain%m_numElem = edgeElems*edgeElems*edgeElems
 domain%m_numNode = edgeNodes*edgeNodes*edgeNodes 
 
 domElems = domain%m_numElem
-PRINT *, "domElems of Domain are: ", domElems
+!PRINT *, "domElems of Domain are: ", domElems
 
 ! Construct a uniform box for the gradient domain
 grad_domain%m_sizeX   = edgeElems
@@ -180,7 +180,7 @@ grad_domain%m_numElem = edgeElems*edgeElems*edgeElems
 grad_domain%m_numNode = edgeNodes*edgeNodes*edgeNodes
 
 grad_domElems = grad_domain%m_numElem
-PRINT *, "grad_domElems of Gradient Domain are: ", grad_domElems
+!PRINT *, "grad_domElems of Gradient Domain are: ", grad_domElems
 
 
 ! allocate field memory for the domain
