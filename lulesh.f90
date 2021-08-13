@@ -102,7 +102,8 @@ INTEGER :: edgeElems
 INTEGER :: edgeNodes
 REAL(KIND=8) :: tx, ty, tz 
 INTEGER :: nidx, zidx 
-INTEGER :: domElems 
+INTEGER :: domElems
+INTEGER(KIND=4) :: grad_domElems
 INTEGER :: plane, row, col, i, j, k
 INTEGER :: planeInc, rowInc
 REAL(KIND=8),DIMENSION(0:7) :: x_local, y_local, z_local
@@ -161,15 +162,25 @@ edgeNodes = edgeElems+1
 !*   Initialize Sedov Mesh  *
 !****************************
 
-! construct a uniform box for this processor
-
+! Construct a uniform box for the domain
 domain%m_sizeX   = edgeElems 
 domain%m_sizeY   = edgeElems 
 domain%m_sizeZ   = edgeElems 
 domain%m_numElem = edgeElems*edgeElems*edgeElems 
 domain%m_numNode = edgeNodes*edgeNodes*edgeNodes 
 
-domElems = domain%m_numElem 
+domElems = domain%m_numElem
+PRINT *, "domElems of Domain are: ", domElems
+
+! Construct a uniform box for the gradient domain
+grad_domain%m_sizeX   = edgeElems
+grad_domain%m_sizeY   = edgeElems
+grad_domain%m_sizeZ   = edgeElems
+grad_domain%m_numElem = edgeElems*edgeElems*edgeElems
+grad_domain%m_numNode = edgeNodes*edgeNodes*edgeNodes
+
+grad_domElems = grad_domain%m_numElem
+PRINT *, "grad_domElems of Gradient Domain are: ", grad_domElems
 
 
 ! allocate field memory for the domain
@@ -195,17 +206,21 @@ DO plane=0, edgeNodes-1
    DO row=0, edgeNodes-1
       tx = 0.0_RLK
       DO col=0, edgeNodes-1
+         ! Initialize nodal coordinates for the domain
          domain%m_x(nidx) = tx
          domain%m_y(nidx) = ty
          domain%m_z(nidx) = tz
+         
+         ! Initialize nodal coordinates for the gradient domain
+         grad_domain%m_x(nidx) = tx
+         grad_domain%m_y(nidx) = ty
+         grad_domain%m_z(nidx) = tz
+         
          nidx = nidx+1
-
          tx = (1.125_RLK*REAL((col+1),8))/REAL(edgeElems,8)
       END DO
-
       ty = 1.125_RLK*REAL((row+1),8)/REAL(edgeElems,8)
    END DO
-
    tz = 1.125_RLK*REAL((plane+1),8)/REAL(edgeElems,8)
 END DO
 
@@ -217,7 +232,7 @@ DO plane=0, edgeElems-1
    DO row=0, edgeElems-1
       DO col=0, edgeElems-1
          localNode => domain%m_nodelist(zidx*8:)
-!  fortran pointer index starts from 1
+         ! Fortran pointer index starts from 1
          localNode(1) = nidx
          localNode(2) = nidx                                   + 1
          localNode(3) = nidx                       + edgeNodes + 1
@@ -389,7 +404,8 @@ DO
 !   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
 !#endif
 
-   IF(domain%m_time >= domain%m_stoptime) EXIT
+   IF(domain%m_cycle >= 50) EXIT
+   !IF(domain%m_time >= domain%m_stoptime) EXIT
 END DO
 
 
