@@ -97,7 +97,7 @@ INTEGER(KIND=4), PARAMETER :: RLK = 8
 
 ! Start of main
 TYPE(domain_type) :: domain
-TYPE(domain_type) :: grad_domain  ! Datastruct to store the gradients in
+!TYPE(domain_type) :: grad_domain  ! Datastruct to store the gradients in
 INTEGER :: edgeElems 
 INTEGER :: edgeNodes
 REAL(KIND=8) :: tx, ty, tz 
@@ -180,11 +180,11 @@ CALL AllocateNodalPersistent(domain, domain%m_numNode)
 CALL AllocateNodesets(domain, edgeNodes*edgeNodes)
 
 ! Allocate field memory for the grad domain
-CALL AllocateElemPersistent(grad_domain, domain%m_numElem)
-CALL AllocateElemTemporary (grad_domain, domain%m_numElem) 
-
-CALL AllocateNodalPersistent(grad_domain, domain%m_numNode) 
-CALL AllocateNodesets(grad_domain, edgeNodes*edgeNodes)
+!CALL AllocateElemPersistent(grad_domain, domain%m_numElem)
+!CALL AllocateElemTemporary (grad_domain, domain%m_numElem) 
+!
+!CALL AllocateNodalPersistent(grad_domain, domain%m_numNode) 
+!CALL AllocateNodesets(grad_domain, edgeNodes*edgeNodes)
 
 ! initialize nodal coordinates 
 nidx = 0
@@ -237,7 +237,7 @@ END DO
 NULLIFY(localNode)
 
 CALL AllocateNodeElemIndexes(domain)
-CALL AllocateNodeElemIndexes(grad_domain)
+!CALL AllocateNodeElemIndexes(grad_domain)
 
 !Create a material IndexSet (entire domain same material for now)
 DO i=0, domElems-1
@@ -381,15 +381,16 @@ CALL CPU_TIME(starttim)
 
 DO
    call TimeIncrement(domain)
-   ! CALL LagrangeLeapFrog(domain)
+   CALL LagrangeLeapFrog(domain)
    ! CALL LagrangeLeapFrog(grad_domain)
-   CALL __ENZYME_AUTODIFF(LagrangeLeapFrog, domain, grad_domain)
+   !CALL __ENZYME_AUTODIFF(LagrangeLeapFrog, domain, grad_domain)
 
 !#ifdef LULESH_SHOW_PROGRESS
 !   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
 !#endif
 
-   IF(domain%m_time >= domain%m_stoptime) EXIT
+   IF(domain%m_cycle >= 50) EXIT
+   !IF(domain%m_time >= domain%m_stoptime) EXIT
 END DO
 
 
