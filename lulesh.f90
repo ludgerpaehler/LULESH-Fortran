@@ -97,7 +97,7 @@ INTEGER(KIND=4), PARAMETER :: RLK = 8
 
 ! Start of main
 TYPE(domain_type) :: domain
-TYPE(domain_type) :: grad_domain  ! Datastruct to store the gradients in
+!TYPE(domain_type) :: grad_domain  ! Datastruct to store the gradients in  - deactivated for the debugging of the primal
 INTEGER :: edgeElems 
 INTEGER :: edgeNodes
 REAL(KIND=8) :: tx, ty, tz 
@@ -108,7 +108,7 @@ INTEGER :: plane, row, col, i, j, k
 INTEGER :: planeInc, rowInc
 REAL(KIND=8),DIMENSION(0:7) :: x_local, y_local, z_local
 INTEGER :: gnode, lnode, idx
-INTEGER(KIND=4), DIMENSION(:), POINTER :: localNode => NULL()
+INTEGER(KIND=4), DIMENSION(:), POINTER :: localNode => NULL()  ! Is this pointer configured correctly
 REAL(KIND=8) :: volume
 REAL(KIND=8) :: starttim, endtim
 REAL(KIND=8) :: elapsed_time
@@ -172,14 +172,14 @@ domain%m_numNode = edgeNodes*edgeNodes*edgeNodes
 domElems = domain%m_numElem
 !PRINT *, "domElems of Domain are: ", domElems
 
-! Construct a uniform box for the gradient domain
-grad_domain%m_sizeX   = edgeElems
-grad_domain%m_sizeY   = edgeElems
-grad_domain%m_sizeZ   = edgeElems
-grad_domain%m_numElem = edgeElems*edgeElems*edgeElems
-grad_domain%m_numNode = edgeNodes*edgeNodes*edgeNodes
+! Construct a uniform box for the gradient domain  - deactivated for debugging of the primal
+!grad_domain%m_sizeX   = edgeElems
+!grad_domain%m_sizeY   = edgeElems
+!grad_domain%m_sizeZ   = edgeElems
+!grad_domain%m_numElem = edgeElems*edgeElems*edgeElems
+!grad_domain%m_numNode = edgeNodes*edgeNodes*edgeNodes
 
-grad_domElems = grad_domain%m_numElem
+!grad_domElems = grad_domain%m_numElem
 !PRINT *, "grad_domElems of Gradient Domain are: ", grad_domElems
 
 
@@ -190,12 +190,12 @@ CALL AllocateElemTemporary (domain, domain%m_numElem)
 CALL AllocateNodalPersistent(domain, domain%m_numNode) 
 CALL AllocateNodesets(domain, edgeNodes*edgeNodes)
 
-! Allocate field memory for the grad domain
-CALL AllocateElemPersistent(grad_domain, domain%m_numElem)
-CALL AllocateElemTemporary (grad_domain, domain%m_numElem) 
+! Allocate field memory for the grad domain  - deactivated for debugging of the primal
+!CALL AllocateElemPersistent(grad_domain, domain%m_numElem)
+!CALL AllocateElemTemporary (grad_domain, domain%m_numElem) 
 
-CALL AllocateNodalPersistent(grad_domain, domain%m_numNode) 
-CALL AllocateNodesets(grad_domain, edgeNodes*edgeNodes)
+!CALL AllocateNodalPersistent(grad_domain, domain%m_numNode) 
+!CALL AllocateNodesets(grad_domain, edgeNodes*edgeNodes)
 
 ! initialize nodal coordinates 
 nidx = 0
@@ -211,10 +211,10 @@ DO plane=0, edgeNodes-1
          domain%m_y(nidx) = ty
          domain%m_z(nidx) = tz
          
-         ! Initialize nodal coordinates for the gradient domain
-         grad_domain%m_x(nidx) = tx
-         grad_domain%m_y(nidx) = ty
-         grad_domain%m_z(nidx) = tz
+         ! Initialize nodal coordinates for the gradient domain  - deactivated for debugging of the primal.
+         !grad_domain%m_x(nidx) = tx
+         !grad_domain%m_y(nidx) = ty
+         !grad_domain%m_z(nidx) = tz
          
          nidx = nidx+1
          tx = (1.125_RLK*REAL((col+1),8))/REAL(edgeElems,8)
@@ -252,7 +252,7 @@ END DO
 NULLIFY(localNode)
 
 CALL AllocateNodeElemIndexes(domain)
-CALL AllocateNodeElemIndexes(grad_domain)
+!CALL AllocateNodeElemIndexes(grad_domain)  - deactivated for debugging of the primal
 
 !Create a material IndexSet (entire domain same material for now)
 DO i=0, domElems-1
@@ -396,9 +396,9 @@ CALL CPU_TIME(starttim)
 
 DO
    call TimeIncrement(domain)
-   ! CALL LagrangeLeapFrog(domain)
+   CALL LagrangeLeapFrog(domain)
    ! CALL LagrangeLeapFrog(grad_domain)
-   CALL __ENZYME_AUTODIFF(LagrangeLeapFrog, domain, grad_domain)
+   !CALL __ENZYME_AUTODIFF(LagrangeLeapFrog, domain, grad_domain)
 
 !#ifdef LULESH_SHOW_PROGRESS
 !   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
