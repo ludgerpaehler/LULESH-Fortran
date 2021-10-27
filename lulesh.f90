@@ -112,6 +112,8 @@ INTEGER(KIND=4), DIMENSION(:), POINTER :: localNode => NULL()  ! Is this pointer
 REAL(KIND=8) :: volume
 REAL(KIND=8) :: starttim, endtim
 REAL(KIND=8) :: elapsed_time
+REAL(KIND=8) :: ebase = 3.948746e+7_RLK
+REAL(KIND=8) :: einit, scale
 
 
 ! Needed for boundary conditions
@@ -154,7 +156,7 @@ REAL(KIND=8) :: AbsDiff, RelDiff
 !CALL GETARG(1, arg)
 !READ(arg,*) edgeElems
 !edgeElems = 15  ! Fixed for debugging purposes
-edgeElems = 30
+edgeElems = 2  ! For debugging
 edgeNodes = edgeElems+1
 
 ! get run options to measure various metrics 
@@ -317,11 +319,17 @@ END DO
        domain%m_nodalMass(idx) =  domain%m_nodalMass(idx) + ( volume / 8.0_RLK)
     END DO
  END DO
-   
 
- ! deposit energy 
- domain%m_e(0) = 3.948746e+7
-  
+ ! deposit initial energy
+ ! An energy of 3.948746e+7 is correct for a problem with
+ ! 45 zones along a side - we need to scale it!
+ scale = edgeElems/45.0_RLK
+ einit = ebase*scale*scale*scale
+ domain%m_e(0) = einit
+ 
+ ! Initialization usually depends on the rowLoc etc. which
+ ! is not used here at all. Should one be worried?
+
  ! set up symmetry nodesets
  nidx = 0
  
@@ -405,7 +413,7 @@ DO
 !   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
 !#endif
 
-   IF(domain%m_cycle >= 50) EXIT
+   IF(domain%m_cycle >= 2) EXIT
    !IF(domain%m_time >= domain%m_stoptime) EXIT
 END DO
 
