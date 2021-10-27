@@ -153,7 +153,8 @@ REAL(KIND=8) :: AbsDiff, RelDiff
 
 !CALL GETARG(1, arg)
 !READ(arg,*) edgeElems
-edgeElems = 15  ! Fixed for debugging purposes
+!edgeElems = 15  ! Fixed for debugging purposes
+edgeElems = 30
 edgeNodes = edgeElems+1
 
 ! get run options to measure various metrics 

@@ -556,9 +556,9 @@ CONTAINS
     b(2,2) =      cjzxi  +  cjzet  -  cjzze
     b(3,2) =   -  cjzxi  +  cjzet  -  cjzze
     b(4,2) = -b(2,2)
-    b(5,2) = -b(3,2)
-    b(6,2) = -b(0,2)
-    b(7,2) = -b(1,2)
+    b(5,2) = -b(3,2)  ! Indices adjusted
+    b(6,2) = -b(0,2)  ! Indices adjusted
+    b(7,2) = -b(1,2)  ! Indices adjusted
 
     ! Calculate jacobian determinant (volume)
     el_volume = 8.0_RLK * ( fjxet * cjxet + fjyet * cjyet + fjzet * cjzet)
