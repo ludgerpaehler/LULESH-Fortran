@@ -113,6 +113,10 @@ REAL(KIND=8) :: volume
 REAL(KIND=8) :: starttim, endtim
 REAL(KIND=8) :: elapsed_time
 
+! Initial energy, which is later to be deposited
+REAL(KIND=8) :: ebase = 3.948746e+7_RLK
+REAL(KIND=8) :: scale, einit
+
 
 ! Needed for boundary conditions
 ! 2 BCs on each of 6 hexahedral faces (12 bits)
@@ -153,8 +157,7 @@ REAL(KIND=8) :: AbsDiff, RelDiff
 
 !CALL GETARG(1, arg)
 !READ(arg,*) edgeElems
-!edgeElems = 15  ! Fixed for debugging purposes
-edgeElems = 30
+edgeElems = 10  ! called `nx` in the Cpp version
 edgeNodes = edgeElems+1
 
 ! get run options to measure various metrics 
@@ -183,6 +186,7 @@ domElems = domain%m_numElem
 !grad_domElems = grad_domain%m_numElem
 !PRINT *, "grad_domElems of Gradient Domain are: ", grad_domElems
 
+!m_regNumList = new Index_t[numElem()]; // material indexset in C++
 
 ! allocate field memory for the domain
 CALL AllocateElemPersistent(domain, domain%m_numElem)
@@ -302,7 +306,7 @@ END DO
  ! initialize field data
  DO i=0, domElems-1
     DO lnode=0,7
-       gnode = domain%m_nodelist(i*8+lnode)
+       gnode = domain%m_nodelist(i+lnode)  ! The "i*8" here does seem to be wrong - nodelist(i)[lnode] in the original C++ code
        x_local(lnode) = domain%m_x(gnode)
        y_local(lnode) = domain%m_y(gnode)
        z_local(lnode) = domain%m_z(gnode)
@@ -313,14 +317,24 @@ END DO
     domain%m_volo(i) = volume
     domain%m_elemMass(i) = volume
     DO j=0, 7
-       idx = domain%m_nodelist(i*8+j)
+       idx = domain%m_nodelist(i*8+j)  ! -> Is this correct, the index is very different to the official C++ index
        domain%m_nodalMass(idx) =  domain%m_nodalMass(idx) + ( volume / 8.0_RLK)
     END DO
  END DO
    
 
- ! deposit energy 
- domain%m_e(0) = 3.948746e+7
+ ! deposit energy   - They are not applying a scaling here!!
+ !domain%m_e(0) = 3.948746e+7
+
+ ! Deposit initial energy
+ ! An energy of 3.948746e+7 is correct for a problem with
+ ! 45 zones along a side - we need to scale it
+ scale = (edgeElems)/45.0_RLK  ! tp is used for the MPI decomp, which is just 1 here.
+ einit = ebase*scale*scale*scale
+ IF (edgeElems == 45) THEN  ! Copilot
+    einit = einit*1.0e+7    ! Copilot
+ END IF                     ! Copilot
+
   
  ! set up symmetry nodesets
  nidx = 0
@@ -337,15 +351,15 @@ END DO
  END DO
 
  ! set up elemement connectivity information
- domain%m_lxim(0) = 0
+ domain%m_lxim(0) = 0  ! Is the index here correct? FORTRAN starts from 1
  DO i=1,domElems-1
     domain%m_lxim(i)   = i-1
     domain%m_lxip(i-1) = i
  END DO
 
- domain%m_lxip(domElems-1) = domElems
+ domain%m_lxip(domElems-1) = domElems ! Should it not be 'domElems-1'?
 
- DO i=0, edgeElems-1
+ DO i=0, edgeElems-1  ! Is the indexing in this loop correct? FORTRAN starts from 1
     domain%m_letam(i)=i
     domain%m_letap(domElems-edgeElems+i) = domElems-edgeElems+i
  END DO
@@ -355,7 +369,7 @@ DO i=edgeElems,domElems-1
    domain%m_letap(i-edgeElems) = i
 END DO
 
-DO i=0,edgeElems*edgeElems-1
+DO i=0,edgeElems*edgeElems-1  ! Is the indexing correct here? Starts at 1, but Fortran-indexing tends to start at 1.
    domain%m_lzetam(i) = i
    domain%m_lzetap(domElems-edgeElems*edgeElems+i) = domElems-edgeElems*edgeElems+i
 END DO
@@ -368,9 +382,15 @@ END DO
 ! set up boundary condition information
 domain%m_elemBC = 0 ! clear BCs by default
 
+
+! ---------------------
+! Checked up to this point, but have not fixed actual errors
+! ----------------------
+
+
 ! faces on "external" boundaries will be
 ! symmetry plane or free surface BCs
-DO i=0,edgeElems-1
+DO i=0, edgeElems-1
    planeInc = i*edgeElems*edgeElems
    rowInc   = i*edgeElems
    DO j=0,edgeElems-1
@@ -405,7 +425,7 @@ DO
 !   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
 !#endif
 
-   IF(domain%m_cycle >= 50) EXIT
+   IF(domain%m_cycle >= 231) EXIT
    !IF(domain%m_time >= domain%m_stoptime) EXIT
 END DO
 
