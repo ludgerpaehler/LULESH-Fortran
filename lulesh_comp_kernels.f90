@@ -214,7 +214,7 @@ CONTAINS
     domain%m_zdd = 0.0_RLK  ! Is this right? Not there in the C++ version
 
     ALLOCATE(domain%m_fx(0:size-1)) 
-    ALLOCATE(domain%m_fy(0:size-1)) 
+    
     ALLOCATE(domain%m_fz(0:size-1)) 
 
     ALLOCATE(domain%m_nodalMass(0:size-1))
@@ -417,6 +417,8 @@ CONTAINS
 
        domain%m_deltatime = newdt
 
+       ! Do I need to advance 'domain' here?!
+
     END IF
 
     ! TRY TO PREVENT VERY SMALL SCALING ON THE NEXT CYCLE
@@ -467,9 +469,9 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:7,0:2) :: b ! alloc 2nd dim to 8 or 0:7
     REAL(KIND=8), INTENT(INOUT) :: el_volume
     INTEGER(KIND=4), PARAMETER :: RLK = 8
-    REAL(KIND=8)  :: x0,x1,x2,x3,x4,x5,x6,x7
-    REAL(KIND=8)  :: y0,y1,y2,y3,y4,y5,y6,y7
-    REAL(KIND=8)  :: z0,z1,z2,z3,z4,z5,z6,z7
+    REAL(KIND=8)  :: x0, x1, x2, x3, x4, x5, x6, x7
+    REAL(KIND=8)  :: y0, y1, y2, y3, y4, y5, y6, y7
+    REAL(KIND=8)  :: z0, z1, z2, z3, z4, z5, z6, z7
 
     REAL(KIND=8)  :: fjxxi, fjxet, fjxze
     REAL(KIND=8)  :: fjyxi, fjyet, fjyze
@@ -556,9 +558,9 @@ CONTAINS
     b(2,2) =      cjzxi  +  cjzet  -  cjzze
     b(3,2) =   -  cjzxi  +  cjzet  -  cjzze
     b(4,2) = -b(2,2)
-    b(5,2) = -b(3,2)  ! Indeces adjusted
-    b(6,2) = -b(0,2)  ! Indeces adjusted
-    b(7,2) = -b(1,2)  ! Indeces adjusted
+    b(5,2) = -b(3,2)  ! Indices adjusted
+    b(6,2) = -b(0,2)  ! Indices adjusted
+    b(7,2) = -b(1,2)  ! Indices adjusted
 
     ! Calculate jacobian determinant (volume)
     el_volume = 8.0_RLK * ( fjxet * cjxet + fjyet * cjyet + fjzet * cjzet)
@@ -578,10 +580,11 @@ CONTAINS
 
     IMPLICIT NONE
 
-    REAL(KIND=8) :: normalX0,normalY0,normalZ0
-    REAL(KIND=8) :: normalX1,normalY1,normalZ1
-    REAL(KIND=8) :: normalX2,normalY2,normalZ2
-    REAL(KIND=8) :: normalX3,normalY3,normalZ3
+    ! The normals here should be pointer!
+    REAL(KIND=8) :: normalX0, normalY0, normalZ0
+    REAL(KIND=8) :: normalX1, normalY1, normalZ1
+    REAL(KIND=8) :: normalX2, normalY2, normalZ2
+    REAL(KIND=8) :: normalX3, normalY3, normalZ3
     REAL(KIND=8) :: x0,y0,z0
     REAL(KIND=8) :: x1,y1,z1
     REAL(KIND=8) :: x2,y2,z2  
@@ -792,7 +795,6 @@ CONTAINS
     ALLOCATE(fy_elem(0:numElem8-1))
     ALLOCATE(fz_elem(0:numElem8-1))
 
-    ! loop over all elements  -> OMP issue happening here
     !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
     DO kk=0, numElem-1
       elemNodes => domain%m_nodelist(kk*8:)

@@ -112,6 +112,8 @@ INTEGER(KIND=4), DIMENSION(:), POINTER :: localNode => NULL()  ! Is this pointer
 REAL(KIND=8) :: volume
 REAL(KIND=8) :: starttim, endtim
 REAL(KIND=8) :: elapsed_time
+REAL(KIND=8) :: ebase = 3.948746e+7_RLK
+REAL(KIND=8) :: einit, scale
 
 ! Initial energy, which is later to be deposited
 REAL(KIND=8) :: ebase = 3.948746e+7_RLK
@@ -157,7 +159,8 @@ REAL(KIND=8) :: AbsDiff, RelDiff
 
 !CALL GETARG(1, arg)
 !READ(arg,*) edgeElems
-edgeElems = 10  ! called `nx` in the Cpp version
+!edgeElems = 15  ! Fixed for debugging purposes
+edgeElems = 2  ! For debugging
 edgeNodes = edgeElems+1
 
 ! get run options to measure various metrics 
@@ -321,7 +324,6 @@ END DO
        domain%m_nodalMass(idx) =  domain%m_nodalMass(idx) + ( volume / 8.0_RLK)
     END DO
  END DO
-   
 
  ! deposit energy   - They are not applying a scaling here!!
  !domain%m_e(0) = 3.948746e+7
