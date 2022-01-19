@@ -380,7 +380,7 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8) :: targetdt
-    REAL(KIND=8) :: ratio, olddt, newdt
+    REAL(KIND=8) :: ratio, olddt, newdt, gnewdt
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     targetdt = domain%m_stoptime - domain%m_time
@@ -390,16 +390,17 @@ CONTAINS
        olddt = domain%m_deltatime
 
        ! This will require a reduction in parallel
-       newdt = 1.0e+20
+       gnewdt = 1.0e+20
 
-       IF (domain%m_dtcourant < newdt) THEN
-          newdt = domain%m_dtcourant / 2.0_RLK
+       IF (domain%m_dtcourant < gnewdt) THEN
+          gnewdt = domain%m_dtcourant / 2.0_RLK
        END IF
 
-       IF (domain%m_dthydro < newdt) THEN
-          newdt = domain%m_dthydro * (2.0_RLK/3.0_RLK)
+       IF (domain%m_dthydro < gnewdt) THEN
+          gnewdt = domain%m_dthydro * (2.0_RLK/3.0_RLK)
        END IF
 
+       newdt = gnewdt
        ratio = newdt / olddt
 
        IF (ratio >= 1.0_RLK) THEN
@@ -422,7 +423,7 @@ CONTAINS
     END IF
 
     ! TRY TO PREVENT VERY SMALL SCALING ON THE NEXT CYCLE
-    IF ((targetdt > domain%m_deltatime) .AND. (targetdt < 4.0_RLK * domain%m_deltatime / 3.0_RLK)) THEN
+    IF ((targetdt > domain%m_deltatime) .AND. (targetdt < (4.0_RLK * domain%m_deltatime / 3.0_RLK))) THEN
        targetdt = 2.0_RLK * domain%m_deltatime / 3.0_RLK
     END IF
 
@@ -856,7 +857,7 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER, DIMENSION(:), POINTER :: elemToNode
-    REAL(KIND=8),DIMENSION(0:7)    :: elemX, elemY, elemZ
+    REAL(KIND=8),DIMENSION(1:8), INTENT(INOUT)    :: elemX, elemY, elemZ
 
     INTEGER(KIND=4) :: nd0i, nd1i, nd2i, nd3i
     INTEGER(KIND=4) :: nd4i, nd5i, nd6i, nd7i
@@ -870,32 +871,32 @@ CONTAINS
     nd6i = elemToNode(7)
     nd7i = elemToNode(8)
 
-    elemX(0) = domain%m_x(nd0i)
-    elemX(1) = domain%m_x(nd1i)
-    elemX(2) = domain%m_x(nd2i)
-    elemX(3) = domain%m_x(nd3i)
-    elemX(4) = domain%m_x(nd4i)
-    elemX(5) = domain%m_x(nd5i)
-    elemX(6) = domain%m_x(nd6i)
-    elemX(7) = domain%m_x(nd7i)
+    elemX(1) = domain%m_x(nd0i)
+    elemX(2) = domain%m_x(nd1i)
+    elemX(3) = domain%m_x(nd2i)
+    elemX(4) = domain%m_x(nd3i)
+    elemX(5) = domain%m_x(nd4i)
+    elemX(6) = domain%m_x(nd5i)
+    elemX(7) = domain%m_x(nd6i)
+    elemX(8) = domain%m_x(nd7i)
 
-    elemY(0) = domain%m_y(nd0i)
-    elemY(1) = domain%m_y(nd1i)
-    elemY(2) = domain%m_y(nd2i)
-    elemY(3) = domain%m_y(nd3i)
-    elemY(4) = domain%m_y(nd4i)
-    elemY(5) = domain%m_y(nd5i)
-    elemY(6) = domain%m_y(nd6i)
-    elemY(7) = domain%m_y(nd7i)
+    elemY(1) = domain%m_y(nd0i)
+    elemY(2) = domain%m_y(nd1i)
+    elemY(3) = domain%m_y(nd2i)
+    elemY(4) = domain%m_y(nd3i)
+    elemY(5) = domain%m_y(nd4i)
+    elemY(6) = domain%m_y(nd5i)
+    elemY(7) = domain%m_y(nd6i)
+    elemY(8) = domain%m_y(nd7i)
 
-    elemZ(0) = domain%m_z(nd0i)
-    elemZ(1) = domain%m_z(nd1i)
-    elemZ(2) = domain%m_z(nd2i)
-    elemZ(3) = domain%m_z(nd3i)
-    elemZ(4) = domain%m_z(nd4i)
-    elemZ(5) = domain%m_z(nd5i)
-    elemZ(6) = domain%m_z(nd6i)
-    elemZ(7) = domain%m_z(nd7i)
+    elemZ(1) = domain%m_z(nd0i)
+    elemZ(2) = domain%m_z(nd1i)
+    elemZ(3) = domain%m_z(nd2i)
+    elemZ(4) = domain%m_z(nd3i)
+    elemZ(5) = domain%m_z(nd4i)
+    elemZ(6) = domain%m_z(nd5i)
+    elemZ(7) = domain%m_z(nd6i)
+    elemZ(8) = domain%m_z(nd7i)
 
   END SUBROUTINE CollectDomainNodesToElemNodes
 
