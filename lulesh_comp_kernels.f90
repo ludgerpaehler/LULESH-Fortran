@@ -481,7 +481,6 @@ CONTAINS
     REAL(KIND=8)  :: cjyxi, cjyet, cjyze
     REAL(KIND=8)  :: cjzxi, cjzet, cjzze
 
-    x0 = x(0)
     x1 = x(1)
     x2 = x(2)
     x3 = x(3)
@@ -489,8 +488,8 @@ CONTAINS
     x5 = x(5)
     x6 = x(6)
     x7 = x(7)
+    x8 = x(8)
 
-    y0 = y(0)
     y1 = y(1)
     y2 = y(2)
     y3 = y(3)
@@ -498,8 +497,8 @@ CONTAINS
     y5 = y(5)
     y6 = y(6)
     y7 = y(7)
+    y8 = y(8)
 
-    z0 = z(0)
     z1 = z(1)
     z2 = z(2)
     z3 = z(3)
@@ -507,18 +506,19 @@ CONTAINS
     z5 = z(5)
     z6 = z(6)
     z7 = z(7)
+    z8 = z(8)
 
-    fjxxi = .125 * ( (x6-x0) + (x5-x3) - (x7-x1) - (x4-x2) )
-    fjxet = .125 * ( (x6-x0) - (x5-x3) + (x7-x1) - (x4-x2) )
-    fjxze = .125 * ( (x6-x0) + (x5-x3) + (x7-x1) + (x4-x2) )
+    fjxxi = .125_RLK * ( (x7-x1) + (x6-x4) - (x8-x2) - (x5-x3) )
+    fjxet = .125_RLK * ( (x7-x1) - (x6-x4) + (x8-x2) - (x5-x3) )
+    fjxze = .125_RLK * ( (x7-x1) + (x6-x4) + (x8-x2) + (x5-x3) )
 
-    fjyxi = .125 * ( (y6-y0) + (y5-y3) - (y7-y1) - (y4-y2) )
-    fjyet = .125 * ( (y6-y0) - (y5-y3) + (y7-y1) - (y4-y2) )
-    fjyze = .125 * ( (y6-y0) + (y5-y3) + (y7-y1) + (y4-y2) )
+    fjyxi = .125_RLK * ( (y7-y1) + (y6-y4) - (y8-y2) - (y5-y3) )
+    fjyet = .125_RLK * ( (y7-y1) - (y6-y4) + (y8-y2) - (y5-y3) )
+    fjyze = .125_RLK * ( (y7-y1) + (y6-y4) + (y8-y2) + (y5-y3) )
 
-    fjzxi = .125 * ( (z6-z0) + (z5-z3) - (z7-z1) - (z4-z2) )
-    fjzet = .125 * ( (z6-z0) - (z5-z3) + (z7-z1) - (z4-z2) )
-    fjzze = .125 * ( (z6-z0) + (z5-z3) + (z7-z1) + (z4-z2) )
+    fjzxi = .125_RLK * ( (z7-z1) + (z6-z4) - (z8-z2) - (z5-z3) )
+    fjzet = .125_RLK * ( (z7-z1) - (z6-z4) + (z8-z2) - (z5-z3) )
+    fjzze = .125_RLK * ( (z7-z1) + (z6-z4) + (z8-z2) + (z5-z3) )
 
     ! Compute cofactors
     cjxxi =    (fjyet * fjzze) - (fjzet * fjyze)
@@ -536,32 +536,32 @@ CONTAINS
     ! calculate partials :
     !     this need only be done for l = 0,1,2,3   since , by symmetry ,
     !     (6,7,4,5) = - (0,1,2,3) .
-    b(0,0) =   -  cjxxi  -  cjxet  -  cjxze
-    b(1,0) =      cjxxi  -  cjxet  -  cjxze
-    b(2,0) =      cjxxi  +  cjxet  -  cjxze
-    b(3,0) =   -  cjxxi  +  cjxet  -  cjxze
-    b(4,0) = -b(2,0)
-    b(5,0) = -b(3,0)
-    b(6,0) = -b(0,0)
-    b(7,0) = -b(1,0)
-
-    b(0,1) =   -  cjyxi  -  cjyet  -  cjyze
-    b(1,1) =      cjyxi  -  cjyet  -  cjyze
-    b(2,1) =      cjyxi  +  cjyet  -  cjyze
-    b(3,1) =   -  cjyxi  +  cjyet  -  cjyze
-    b(4,1) = -b(2,1)
+    b(1,1) =   -  cjxxi  -  cjxet  -  cjxze
+    b(2,1) =      cjxxi  -  cjxet  -  cjxze
+    b(3,1) =      cjxxi  +  cjxet  -  cjxze
+    b(4,1) =   -  cjxxi  +  cjxet  -  cjxze
     b(5,1) = -b(3,1)
-    b(6,1) = -b(0,1)
+    b(6,1) = -b(4,1)
     b(7,1) = -b(1,1)
+    b(8,1) = -b(2,1)
 
-    b(0,2) =   -  cjzxi  -  cjzet  -  cjzze
-    b(1,2) =      cjzxi  -  cjzet  -  cjzze
-    b(2,2) =      cjzxi  +  cjzet  -  cjzze
-    b(3,2) =   -  cjzxi  +  cjzet  -  cjzze
-    b(4,2) = -b(2,2)
-    b(5,2) = -b(3,2)  ! Indices adjusted
-    b(6,2) = -b(0,2)  ! Indices adjusted
-    b(7,2) = -b(1,2)  ! Indices adjusted
+    b(1,2) =   -  cjyxi  -  cjyet  -  cjyze
+    b(2,2) =      cjyxi  -  cjyet  -  cjyze
+    b(3,2) =      cjyxi  +  cjyet  -  cjyze
+    b(4,2) =   -  cjyxi  +  cjyet  -  cjyze
+    b(5,2) = -b(3,2)
+    b(6,2) = -b(4,2)
+    b(7,2) = -b(1,2)
+    b(8,2) = -b(2,2)
+
+    b(1,3) =   -  cjzxi  -  cjzet  -  cjzze
+    b(2,3) =      cjzxi  -  cjzet  -  cjzze
+    b(3,3) =      cjzxi  +  cjzet  -  cjzze
+    b(4,3) =   -  cjzxi  +  cjzet  -  cjzze
+    b(5,3) = -b(3,3)
+    b(6,3) = -b(4,3)  ! Indices adjusted
+    b(7,3) = -b(1,3)  ! Indices adjusted
+    b(8,3) = -b(2,3)  ! Indices adjusted
 
     ! Calculate jacobian determinant (volume)
     el_volume = 8.0_RLK * ( fjxet * cjxet + fjyet * cjyet + fjzet * cjzet)
@@ -570,64 +570,62 @@ CONTAINS
 
 
 
-  SUBROUTINE SumElemFaceNormal(normalX0, normalY0, normalZ0, &
-                               normalX1, normalY1, normalZ1, &
+  SUBROUTINE SumElemFaceNormal(normalX1, normalY1, normalZ1, &
                                normalX2, normalY2, normalZ2, &
                                normalX3, normalY3, normalZ3, &
-                                x0,  y0,  z0,    &
+                               normalX4, normalY4, normalZ4, &
                                 x1,  y1,  z1,    &
                                 x2,  y2,  z2,    &
-                                x3,  y3,  z3     )
+                                x3,  y3,  z3,    &
+                                x4,  y4,  z4     )
 
     IMPLICIT NONE
 
     ! The normals here should be pointer!
-    REAL(KIND=8) :: normalX0, normalY0, normalZ0
-    REAL(KIND=8) :: normalX1, normalY1, normalZ1
-    REAL(KIND=8) :: normalX2, normalY2, normalZ2
-    REAL(KIND=8) :: normalX3, normalY3, normalZ3
-    REAL(KIND=8) :: x0,y0,z0
-    REAL(KIND=8) :: x1,y1,z1
-    REAL(KIND=8) :: x2,y2,z2  
-    REAL(KIND=8) :: x3,y3,z3
+    REAL(KIND=8), POINTER :: normalX1, normalY1, normalZ1
+    REAL(KIND=8), POINTER :: normalX2, normalY2, normalZ2
+    REAL(KIND=8), POINTER :: normalX3, normalY3, normalZ3
+    REAL(KIND=8), POINTER :: normalX4, normalY4, normalZ4
+    REAL(KIND=8) :: x1, y1, z1
+    REAL(KIND=8) :: x2, y2, z2
+    REAL(KIND=8) :: x3, y3, z3  
+    REAL(KIND=8) :: x4, y4, z4
   
-    REAL(KIND=8) :: bisectX0
-    REAL(KIND=8) :: bisectY0
-    REAL(KIND=8) :: bisectZ0
     REAL(KIND=8) :: bisectX1
     REAL(KIND=8) :: bisectY1
     REAL(KIND=8) :: bisectZ1
+    REAL(KIND=8) :: bisectX2
+    REAL(KIND=8) :: bisectY2
+    REAL(KIND=8) :: bisectZ2
     REAL(KIND=8) :: areaX
     REAL(KIND=8) :: areaY
     REAL(KIND=8) :: areaZ
     INTEGER(KIND=4), PARAMETER :: RLK = 8
-    REAL(KIND=8), PARAMETER :: RHALF = 0.5_RLK
-    REAL(KIND=8), PARAMETER :: RQTR  = 0.25_RLK
 
-    bisectX0 = RHALF * (x3 + x2 - x1 - x0)
-    bisectY0 = RHALF * (y3 + y2 - y1 - y0)
-    bisectZ0 = RHALF * (z3 + z2 - z1 - z0)
-    bisectX1 = RHALF * (x2 + x1 - x3 - x0)
-    bisectY1 = RHALF * (y2 + y1 - y3 - y0)
-    bisectZ1 = RHALF * (z2 + z1 - z3 - z0)
-    areaX = RQTR * (bisectY0 * bisectZ1 - bisectZ0 * bisectY1)
-    areaY = RQTR * (bisectZ0 * bisectX1 - bisectX0 * bisectZ1)
-    areaZ = RQTR * (bisectX0 * bisectY1 - bisectY0 * bisectX1)
+    bisectX1 = 0.5_RLK * (x3 + x2 - x1 - x0)
+    bisectY1 = 0.5_RLK * (y3 + y2 - y1 - y0)
+    bisectZ1 = 0.5_RLK * (z3 + z2 - z1 - z0)
+    bisectX2 = 0.5_RLK * (x2 + x1 - x3 - x0)
+    bisectY2 = 0.5_RLK * (y2 + y1 - y3 - y0)
+    bisectZ2 = 0.5_RLK * (z2 + z1 - z3 - z0)
+    areaX = 0.25_RLK * (bisectY1 * bisectZ2 - bisectZ1 * bisectY2)
+    areaY = 0.25_RLK * (bisectZ1 * bisectX2 - bisectX1 * bisectZ2)
+    areaZ = 0.25_RLK * (bisectX1 * bisectY2 - bisectY1 * bisectX2)
 
-    normalX0 = normalX0 + areaX
     normalX1 = normalX1 + areaX
     normalX2 = normalX2 + areaX
     normalX3 = normalX3 + areaX
+    normalX4 = normalX4 + areaX
 
-    normalY0 = normalY0 + areaY
     normalY1 = normalY1 + areaY
     normalY2 = normalY2 + areaY
     normalY3 = normalY3 + areaY
+    normalY4 = normalY4 + areaY
 
-    normalZ0 = normalZ0 + areaZ
     normalZ1 = normalZ1 + areaZ
     normalZ2 = normalZ2 + areaZ
     normalZ3 = normalZ3 + areaZ
+    normalZ4 = normalZ4 + areaZ
 
   END SUBROUTINE SumElemFaceNormal
 
