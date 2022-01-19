@@ -602,12 +602,12 @@ CONTAINS
     REAL(KIND=8) :: areaZ
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
-    bisectX1 = 0.5_RLK * (x3 + x2 - x1 - x0)
-    bisectY1 = 0.5_RLK * (y3 + y2 - y1 - y0)
-    bisectZ1 = 0.5_RLK * (z3 + z2 - z1 - z0)
-    bisectX2 = 0.5_RLK * (x2 + x1 - x3 - x0)
-    bisectY2 = 0.5_RLK * (y2 + y1 - y3 - y0)
-    bisectZ2 = 0.5_RLK * (z2 + z1 - z3 - z0)
+    bisectX1 = 0.5_RLK * (x4 + x3 - x2 - x1)
+    bisectY1 = 0.5_RLK * (y4 + y3 - y2 - y1)
+    bisectZ1 = 0.5_RLK * (z4 + z3 - z2 - z1)
+    bisectX2 = 0.5_RLK * (x3 + x2 - x4 - x1)
+    bisectY2 = 0.5_RLK * (y3 + y2 - y4 - y1)
+    bisectZ2 = 0.5_RLK * (z3 + z2 - z4 - z1)
     areaX = 0.25_RLK * (bisectY1 * bisectZ2 - bisectZ1 * bisectY2)
     areaY = 0.25_RLK * (bisectZ1 * bisectX2 - bisectX1 * bisectZ2)
     areaZ = 0.25_RLK * (bisectX1 * bisectY2 - bisectY1 * bisectX2)
@@ -634,59 +634,59 @@ CONTAINS
   SUBROUTINE CalcElemNodeNormals(pfx,pfy, pfz, x, y, z)
 
     IMPLICIT NONE 
-    REAL(KIND=8), DIMENSION(0:) :: pfx,pfy,pfz
-    REAL(KIND=8), DIMENSION(0:) :: x, y, z
+    REAL(KIND=8), DIMENSION(1:8) :: pfx,pfy,pfz
+    REAL(KIND=8), DIMENSION(1:8) :: x, y, z
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     INTEGER(KIND=4) :: i
 
-    DO i = 0, 7
+    DO i = 1, 8
       pfx(i) = 0.0_RLK
       pfy(i) = 0.0_RLK
       pfz(i) = 0.0_RLK
     ENDDO
 
-    ! Evaluate face one: nodes 0, 1, 2, 3
-    CALL SumElemFaceNormal(pfx(0), pfy(0), pfz(0),              &
-                           pfx(1), pfy(1), pfz(1),              &
+    ! Evaluate face one: nodes 1, 2, 3, 4
+    CALL SumElemFaceNormal(pfx(1), pfy(1), pfz(1),              &
                            pfx(2), pfy(2), pfz(2),              &
                            pfx(3), pfy(3), pfz(3),              &
-                           x(0), y(0), z(0), x(1), y(1), z(1),  &
-                           x(2), y(2), z(2), x(3), y(3), z(3))
-    ! Evaluate face two: nodes 0, 4, 5, 1 */
-    CALL SumElemFaceNormal(pfx(0), pfy(0), pfz(0),              &
                            pfx(4), pfy(4), pfz(4),              &
-                           pfx(5), pfy(5), pfz(5),              &
-                           pfx(1), pfy(1), pfz(1),              &
-                           x(0), y(0), z(0), x(4), y(4), z(4),  &
-                           x(5), y(5), z(5), x(1), y(1), z(1))
-    ! Evaluate face three: nodes 1, 5, 6, 2 */
+                           x(1), y(1), z(1), x(2), y(2), z(2),  &
+                           x(3), y(3), z(3), x(4), y(4), z(4))
+    ! Evaluate face two: nodes 1, 5, 6, 2
     CALL SumElemFaceNormal(pfx(1), pfy(1), pfz(1),              &
                            pfx(5), pfy(5), pfz(5),              &
                            pfx(6), pfy(6), pfz(6),              &
                            pfx(2), pfy(2), pfz(2),              &
                            x(1), y(1), z(1), x(5), y(5), z(5),  &
                            x(6), y(6), z(6), x(2), y(2), z(2))
-    ! Evaluate face four: nodes 2, 6, 7, 3 */
+    ! Evaluate face three: nodes 2, 6, 7, 3
     CALL SumElemFaceNormal(pfx(2), pfy(2), pfz(2),              &
                            pfx(6), pfy(6), pfz(6),              &
                            pfx(7), pfy(7), pfz(7),              &
                            pfx(3), pfy(3), pfz(3),              &
                            x(2), y(2), z(2), x(6), y(6), z(6),  &
                            x(7), y(7), z(7), x(3), y(3), z(3))
-    ! Evaluate face five: nodes 3, 7, 4, 0 */
+    ! Evaluate face four: nodes 3, 7, 8, 4
     CALL SumElemFaceNormal(pfx(3), pfy(3), pfz(3),              &
                            pfx(7), pfy(7), pfz(7),              &
+                           pfx(8), pfy(8), pfz(8),              &
                            pfx(4), pfy(4), pfz(4),              &
-                           pfx(0), pfy(0), pfz(0),              &
                            x(3), y(3), z(3), x(7), y(7), z(7),  &
-                           x(4), y(4), z(4), x(0), y(0), z(0))
-    ! Evaluate face six: nodes 4, 7, 6, 5 */
+                           x(8), y(8), z(8), x(4), y(4), z(4))
+    ! Evaluate face five: nodes 4, 8, 5, 1
     CALL SumElemFaceNormal(pfx(4), pfy(4), pfz(4),              &
+                           pfx(8), pfy(8), pfz(8),              &
+                           pfx(5), pfy(5), pfz(5),              &
+                           pfx(1), pfy(1), pfz(1),              &
+                           x(4), y(4), z(4), x(8), y(8), z(8),  &
+                           x(5), y(5), z(5), x(1), y(1), z(1))
+    ! Evaluate face six: nodes 5, 8, 7, 6
+    CALL SumElemFaceNormal(pfx(5), pfy(5), pfz(5),              &
+                           pfx(8), pfy(8), pfz(8),              &
                            pfx(7), pfy(7), pfz(7),              &
                            pfx(6), pfy(6), pfz(6),              &
-                           pfx(5), pfy(5), pfz(5),              &
-                           x(4), y(4), z(4), x(7), y(7), z(7),  &
-                           x(6), y(6), z(6), x(5), y(5), z(5))
+                           x(5), y(5), z(5), x(8), y(8), z(8),  &
+                           x(7), y(7), z(7), x(6), y(6), z(6))
 
   END SUBROUTINE CalcElemNodeNormals
 
@@ -695,67 +695,16 @@ CONTAINS
   SUBROUTINE SumElemStressesToNodeForces(B, stress_xx, stress_yy, stress_zz,  fx,  fy,  fz)
     IMPLICIT NONE
 
-    REAL(KIND=8) ,DIMENSION(0:7,0:2) :: B ! alloc 2nd dim to 8 or 0:7
+    REAL(KIND=8) ,DIMENSION(1:8, 1:3) :: B
     REAL(KIND=8) :: stress_xx, stress_yy, stress_zz
-    REAL(KIND=8), DIMENSION(0:7) ::  fx,  fy,  fz 
+    REAL(KIND=8), DIMENSION(1:8) ::  fx,  fy,  fz
+    INTEGER(KIND=4) :: i
 
-    REAL(KIND=8) :: pfx0, pfx1, pfx2, pfx3, pfx4, pfx5, pfx6, pfx7
-    REAL(KIND=8) :: pfy0, pfy1, pfy2, pfy3, pfy4, pfy5, pfy6, pfy7
-    REAL(KIND=8) :: pfz0, pfz1, pfz2, pfz3, pfz4, pfz5, pfz6, pfz7
-
-    pfx0 = B(0,0)
-    pfx1 = B(1,0)
-    pfx2 = B(2,0)
-    pfx3 = B(3,0)
-    pfx4 = B(4,0)
-    pfx5 = B(5,0)
-    pfx6 = B(6,0)
-    pfx7 = B(7,0)
-
-    pfy0 = B(0,1)
-    pfy1 = B(1,1)
-    pfy2 = B(2,1)
-    pfy3 = B(3,1)
-    pfy4 = B(4,1)
-    pfy5 = B(5,1)
-    pfy6 = B(6,1)
-    pfy7 = B(7,1)
-
-    pfz0 = B(0,2)
-    pfz1 = B(1,2)
-    pfz2 = B(2,2)
-    pfz3 = B(3,2)
-    pfz4 = B(4,2)
-    pfz5 = B(5,2)
-    pfz6 = B(6,2)
-    pfz7 = B(7,2)
-
-    fx(0) = -( stress_xx * pfx0 )
-    fx(1) = -( stress_xx * pfx1 )
-    fx(2) = -( stress_xx * pfx2 )
-    fx(3) = -( stress_xx * pfx3 )
-    fx(4) = -( stress_xx * pfx4 )
-    fx(5) = -( stress_xx * pfx5 )
-    fx(6) = -( stress_xx * pfx6 )
-    fx(7) = -( stress_xx * pfx7 )
-
-    fy(0) = -( stress_yy * pfy0  )
-    fy(1) = -( stress_yy * pfy1  )
-    fy(2) = -( stress_yy * pfy2  )
-    fy(3) = -( stress_yy * pfy3  )
-    fy(4) = -( stress_yy * pfy4  )
-    fy(5) = -( stress_yy * pfy5  )
-    fy(6) = -( stress_yy * pfy6  )
-    fy(7) = -( stress_yy * pfy7  )
-
-    fz(0) = -( stress_zz * pfz0 )
-    fz(1) = -( stress_zz * pfz1 )
-    fz(2) = -( stress_zz * pfz2 )
-    fz(3) = -( stress_zz * pfz3 )
-    fz(4) = -( stress_zz * pfz4 )
-    fz(5) = -( stress_zz * pfz5 )
-    fz(6) = -( stress_zz * pfz6 )
-    fz(7) = -( stress_zz * pfz7 )
+    DO i=1, 8
+      fx(i) = - ( stress_xx * B(i, 1) )
+      fy(i) = - ( stress_yy * B(i, 2) )
+      fz(i) = - ( stress_zz * B(i, 3) )
+    END DO
 
   END SUBROUTINE SumElemStressesToNodeForces
 
