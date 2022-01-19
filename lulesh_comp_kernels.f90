@@ -450,7 +450,7 @@ CONTAINS
     INTEGER(KIND=4) :: ii
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
-    DO ii = 0, numElem-1
+    DO ii = 1, numElem
       sigxx(ii) =  - domain%m_p(ii) - domain%m_q(ii)
       sigyy(ii) =  - domain%m_p(ii) - domain%m_q(ii)
       sigzz(ii) =  - domain%m_p(ii) - domain%m_q(ii)
@@ -466,13 +466,13 @@ CONTAINS
                                                el_volume   )
     IMPLICIT NONE 
 
-    REAL(KIND=8), DIMENSION(0:7)  :: x, y, z
-    REAL(KIND=8), DIMENSION(0:7,0:2) :: b ! alloc 2nd dim to 8 or 0:7
+    REAL(KIND=8), DIMENSION(1:8)  :: x, y, z
+    REAL(KIND=8), DIMENSION(1:8,1:3) :: b
     REAL(KIND=8), INTENT(INOUT) :: el_volume
     INTEGER(KIND=4), PARAMETER :: RLK = 8
-    REAL(KIND=8)  :: x0, x1, x2, x3, x4, x5, x6, x7
-    REAL(KIND=8)  :: y0, y1, y2, y3, y4, y5, y6, y7
-    REAL(KIND=8)  :: z0, z1, z2, z3, z4, z5, z6, z7
+    REAL(KIND=8)  :: x1, x2, x3, x4, x5, x6, x7, x8
+    REAL(KIND=8)  :: y1, y2, y3, y4, y5, y6, y7, y8
+    REAL(KIND=8)  :: z1, z2, z3, z4, z5, z6, z7, z8
 
     REAL(KIND=8)  :: fjxxi, fjxet, fjxze
     REAL(KIND=8)  :: fjyxi, fjyet, fjyze
