@@ -950,183 +950,51 @@ CONTAINS
     REAL(KIND=8), DIMENSION(1:8) :: xd,yd,zd
     REAL(KIND=8), DIMENSION(1:4,1:8) :: hourgam
     REAL(KIND=8) :: coefficient
-    REAL(KIND=8),DIMENSION(0:7) :: hgfx,hgfy,hgfz
-    REAL(KIND=8) :: h00,h01,h02,h03
+    REAL(KIND=8), DIMENSION(1:8) :: hgfx,hgfy,hgfz
+    REAL(KIND=8), DIMENSION(1:4) :: hxx
+    INTEGER(KIND=4) :: i
 
-    INTEGER(KIND=4),PARAMETER :: i00 = 0_4
-    INTEGER(KIND=4),PARAMETER :: i01 = 1_4
-    INTEGER(KIND=4),PARAMETER :: i02 = 2_4
-    INTEGER(KIND=4),PARAMETER :: i03 = 3_4
+    DO i=1, 4
+      hxx(i) = hourgam(i, 1) * xd(1) + hourgam(i, 2) * xd(2) + &
+               hourgam(i, 3) * xd(3) + hourgam(i, 4) * xd(4) + &
+               hourgam(i, 5) * xd(5) + hourgam(i, 6) * xd(6) + &
+               hourgam(i, 7) * xd(7) + hourgam(i, 8) * xd(8)
+    END DO
 
-    h00 =                                             &
-      hourgam0(i00) * xd(0) + hourgam1(i00) * xd(1) + &
-      hourgam2(i00) * xd(2) + hourgam3(i00) * xd(3) + &
-      hourgam4(i00) * xd(4) + hourgam5(i00) * xd(5) + &
-      hourgam6(i00) * xd(6) + hourgam7(i00) * xd(7)
+    DO i=1, 8
+      hgfx(i) = coefficient * (hxx(1) * hourgam(1, i) + &
+                               hxx(2) * hourgam(2, i) + &
+                               hxx(3) * hourgam(3, i) + &
+                               hxx(4) * hourgam(4, i))
+    END DO
 
-    h01 =                                             &
-      hourgam0(i01) * xd(0) + hourgam1(i01) * xd(1) + &
-      hourgam2(i01) * xd(2) + hourgam3(i01) * xd(3) + &
-      hourgam4(i01) * xd(4) + hourgam5(i01) * xd(5) + &
-      hourgam6(i01) * xd(6) + hourgam7(i01) * xd(7)
+    DO i=1, 4
+      hxx(i) = hourgam(i, 1) * yd(1) + hourgam(i, 2) * yd(2) + &
+               hourgam(i, 3) * yd(3) + hourgam(i, 4) * yd(4) + &
+               hourgam(i, 5) * yd(5) + hourgam(i, 6) * yd(6) + &
+               hourgam(i, 7) * yd(7) + hourgam(i, 8) * yd(8)
+    END DO
 
-    h02 =                                             &
-      hourgam0(i02) * xd(0) + hourgam1(i02) * xd(1) + &
-      hourgam2(i02) * xd(2) + hourgam3(i02) * xd(3) + &
-      hourgam4(i02) * xd(4) + hourgam5(i02) * xd(5) + &
-      hourgam6(i02) * xd(6) + hourgam7(i02) * xd(7)
+    DO i=1, 8
+      hgfy(i) = coefficient * (hxx(1) * hourgam(1, i) + &
+                               hxx(2) * hourgam(2, i) + &
+                               hxx(3) * hourgam(3, i) + &
+                               hxx(4) * hourgam(4, i))
+    END DO
 
-    h03 =                                             &
-      hourgam0(i03) * xd(0) + hourgam1(i03) * xd(1) + &
-      hourgam2(i03) * xd(2) + hourgam3(i03) * xd(3) + &
-      hourgam4(i03) * xd(4) + hourgam5(i03) * xd(5) + &
-      hourgam6(i03) * xd(6) + hourgam7(i03) * xd(7)
+    DO i=1, 4
+      hxx(i) = hourgam(i, 1) * zd(1) + hourgam(i, 2) * zd(2) + &
+               hourgam(i, 3) * zd(3) + hourgam(i, 4) * zd(4) + &
+               hourgam(i, 5) * zd(5) + hourgam(i, 6) * zd(6) + &
+               hourgam(i, 7) * zd(7) + hourgam(i, 8) * zd(8)
+    END DO
 
-    hgfx(0) = coefficient *                       &
-     (hourgam0(i00) * h00 + hourgam0(i01) * h01 + &
-      hourgam0(i02) * h02 + hourgam0(i03) * h03)
-
-    hgfx(1) = coefficient *                       &
-     (hourgam1(i00) * h00 + hourgam1(i01) * h01 + &
-      hourgam1(i02) * h02 + hourgam1(i03) * h03)
-
-    hgfx(2) = coefficient *                       &
-     (hourgam2(i00) * h00 + hourgam2(i01) * h01 + &
-      hourgam2(i02) * h02 + hourgam2(i03) * h03)
-
-    hgfx(3) = coefficient *                       &
-     (hourgam3(i00) * h00 + hourgam3(i01) * h01 + &
-      hourgam3(i02) * h02 + hourgam3(i03) * h03)
-
-    hgfx(4) = coefficient *                       &
-     (hourgam4(i00) * h00 + hourgam4(i01) * h01 + &
-      hourgam4(i02) * h02 + hourgam4(i03) * h03)
-
-    hgfx(5) = coefficient *                       &
-     (hourgam5(i00) * h00 + hourgam5(i01) * h01 + &
-      hourgam5(i02) * h02 + hourgam5(i03) * h03)
-
-    hgfx(6) = coefficient *                       &
-     (hourgam6(i00) * h00 + hourgam6(i01) * h01 + &
-      hourgam6(i02) * h02 + hourgam6(i03) * h03)
-
-    hgfx(7) = coefficient *                       &
-     (hourgam7(i00) * h00 + hourgam7(i01) * h01 + &
-      hourgam7(i02) * h02 + hourgam7(i03) * h03)
-
-    h00 =                                             &
-      hourgam0(i00) * yd(0) + hourgam1(i00) * yd(1) + &
-      hourgam2(i00) * yd(2) + hourgam3(i00) * yd(3) + &
-      hourgam4(i00) * yd(4) + hourgam5(i00) * yd(5) + &
-      hourgam6(i00) * yd(6) + hourgam7(i00) * yd(7)
-
-    h01 =                                             &
-      hourgam0(i01) * yd(0) + hourgam1(i01) * yd(1) + &
-      hourgam2(i01) * yd(2) + hourgam3(i01) * yd(3) + &
-      hourgam4(i01) * yd(4) + hourgam5(i01) * yd(5) + &
-      hourgam6(i01) * yd(6) + hourgam7(i01) * yd(7)
-
-    h02 =                                            &
-      hourgam0(i02) * yd(0) + hourgam1(i02) * yd(1)+ &
-      hourgam2(i02) * yd(2) + hourgam3(i02) * yd(3)+ &
-      hourgam4(i02) * yd(4) + hourgam5(i02) * yd(5)+ &
-      hourgam6(i02) * yd(6) + hourgam7(i02) * yd(7)
-
-    h03 =                                             &
-      hourgam0(i03) * yd(0) + hourgam1(i03) * yd(1) + &
-      hourgam2(i03) * yd(2) + hourgam3(i03) * yd(3) + &
-      hourgam4(i03) * yd(4) + hourgam5(i03) * yd(5) + &
-      hourgam6(i03) * yd(6) + hourgam7(i03) * yd(7)
-
-
-    hgfy(0) = coefficient *                       &
-     (hourgam0(i00) * h00 + hourgam0(i01) * h01 + &
-      hourgam0(i02) * h02 + hourgam0(i03) * h03)
-
-    hgfy(1) = coefficient *                       &
-     (hourgam1(i00) * h00 + hourgam1(i01) * h01 + &
-      hourgam1(i02) * h02 + hourgam1(i03) * h03)
-
-    hgfy(2) = coefficient *                       &
-     (hourgam2(i00) * h00 + hourgam2(i01) * h01 + &
-      hourgam2(i02) * h02 + hourgam2(i03) * h03)
-
-    hgfy(3) = coefficient *                       &
-     (hourgam3(i00) * h00 + hourgam3(i01) * h01 + &
-      hourgam3(i02) * h02 + hourgam3(i03) * h03)
-
-    hgfy(4) = coefficient *                       &
-     (hourgam4(i00) * h00 + hourgam4(i01) * h01 + &
-      hourgam4(i02) * h02 + hourgam4(i03) * h03)
-
-    hgfy(5) = coefficient *                       &
-     (hourgam5(i00) * h00 + hourgam5(i01) * h01 + &
-      hourgam5(i02) * h02 + hourgam5(i03) * h03)
-
-    hgfy(6) = coefficient *                       &
-     (hourgam6(i00) * h00 + hourgam6(i01) * h01 + &
-      hourgam6(i02) * h02 + hourgam6(i03) * h03)
-
-    hgfy(7) = coefficient *                       &
-     (hourgam7(i00) * h00 + hourgam7(i01) * h01 + &
-      hourgam7(i02) * h02 + hourgam7(i03) * h03)
-
-    h00 =                                              &
-      hourgam0(i00) * zd(0) + hourgam1(i00) * zd(1) +  &
-      hourgam2(i00) * zd(2) + hourgam3(i00) * zd(3) +  &
-      hourgam4(i00) * zd(4) + hourgam5(i00) * zd(5) +  &
-      hourgam6(i00) * zd(6) + hourgam7(i00) * zd(7)
-
-    h01 =                                              &
-      hourgam0(i01) * zd(0) + hourgam1(i01) * zd(1) +  &
-      hourgam2(i01) * zd(2) + hourgam3(i01) * zd(3) +  &
-      hourgam4(i01) * zd(4) + hourgam5(i01) * zd(5) +  &
-      hourgam6(i01) * zd(6) + hourgam7(i01) * zd(7)
-
-    h02 =                                              &
-      hourgam0(i02) * zd(0) + hourgam1(i02) * zd(1)+   &
-      hourgam2(i02) * zd(2) + hourgam3(i02) * zd(3)+   &
-      hourgam4(i02) * zd(4) + hourgam5(i02) * zd(5)+   &
-      hourgam6(i02) * zd(6) + hourgam7(i02) * zd(7)
-
-    h03 =                                              &
-      hourgam0(i03) * zd(0) + hourgam1(i03) * zd(1) +  &
-      hourgam2(i03) * zd(2) + hourgam3(i03) * zd(3) +  &
-      hourgam4(i03) * zd(4) + hourgam5(i03) * zd(5) +  &
-      hourgam6(i03) * zd(6) + hourgam7(i03) * zd(7)
-
-
-    hgfz(0) = coefficient *                        &
-     (hourgam0(i00) * h00 + hourgam0(i01) * h01 +  &
-      hourgam0(i02) * h02 + hourgam0(i03) * h03)
-
-    hgfz(1) = coefficient *                        &
-     (hourgam1(i00) * h00 + hourgam1(i01) * h01 +  &
-      hourgam1(i02) * h02 + hourgam1(i03) * h03)
-
-    hgfz(2) = coefficient *                        &
-     (hourgam2(i00) * h00 + hourgam2(i01) * h01 +  &
-      hourgam2(i02) * h02 + hourgam2(i03) * h03)
-
-    hgfz(3) = coefficient *                        &
-     (hourgam3(i00) * h00 + hourgam3(i01) * h01 +  &
-      hourgam3(i02) * h02 + hourgam3(i03) * h03)
-
-    hgfz(4) = coefficient *                        &
-     (hourgam4(i00) * h00 + hourgam4(i01) * h01 +  &
-      hourgam4(i02) * h02 + hourgam4(i03) * h03)
-
-    hgfz(5) = coefficient *                        &
-     (hourgam5(i00) * h00 + hourgam5(i01) * h01 +  &
-      hourgam5(i02) * h02 + hourgam5(i03) * h03)
-
-    hgfz(6) = coefficient *                        &
-     (hourgam6(i00) * h00 + hourgam6(i01) * h01 +  &
-      hourgam6(i02) * h02 + hourgam6(i03) * h03)
-
-    hgfz(7) = coefficient *                        &
-     (hourgam7(i00) * h00 + hourgam7(i01) * h01 +  &
-      hourgam7(i02) * h02 + hourgam7(i03) * h03)
+    DO i=1, 8
+      hgfz(i) = coefficient * (hxx(1) * hourgam(1, i) + &
+                               hxx(2) * hourgam(2, i) + &
+                               hxx(3) * hourgam(3, i) + &
+                               hxx(4) * hourgam(4, i))
+    END DO
 
   END SUBROUTINE CalcElemFBHourglassForce
 
