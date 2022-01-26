@@ -716,20 +716,22 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER      :: numElem
-    REAL(KIND=8),DIMENSION(0:) :: sigxx, sigyy, sigzz
-    REAL(KIND=8),DIMENSION(0:), INTENT(INOUT) :: determ
+    REAL(KIND=8), DIMENSION(0:) :: sigxx, sigyy, sigzz
+    REAL(KIND=8), DIMENSION(0:), INTENT(INOUT) :: determ
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8) :: fx_local, fy_local, fz_local, fx_tmp, fy_tmp, fz_tmp
     REAL(KIND=8) :: x_local, y_local, z_local
-    REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: fx_elem, fy_elem, fz_elem
-    REAL(KIND=8),DIMENSION(1:8,1:3) :: B   ! shape function derivatives
-    REAL(KIND=8),DIMENSION(1:8)   :: x_local
-    REAL(KIND=8),DIMENSION(1:8)   :: y_local
-    REAL(KIND=8),DIMENSION(1:8)   :: z_local
+    REAL(KIND=8), DIMENSION(:),ALLOCATABLE :: fx_elem, fy_elem, fz_elem
+    REAL(KIND=8), DIMENSION(1:8,1:3) :: B   ! shape function derivatives
+    REAL(KIND=8), DIMENSION(1:8)   :: x_local
+    REAL(KIND=8), DIMENSION(1:8)   :: y_local
+    REAL(KIND=8), DIMENSION(1:8)   :: z_local
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemNodes => NULL()
-    INTEGER      :: lnode, gnode, count, cornerList, ielem, kk
-    INTEGER      :: numNode, numElem8
+    INTEGER      :: lnode, gnode, count, ielem, kk
+    INTEGER      :: numNode = domain%m_numNode
+    INTEGER, DIMENSION(1:numNode) :: cornerList
+    INTEGER      :: numElem8
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4) :: numthreads
 
@@ -779,15 +781,12 @@ CONTAINS
         END DO
       ENDIF
     ENDDO
-    !  !$OMP END PARALLEL DO
-
-    ! Get numNode
-    numNode = domain%m_numNode
+    !  !$OMP END PARALLEL DO 
 
     IF (numthreads > 1) THEN
       DO gnode=1, numNode
         count = domain%m_nodeElemCount(gnode)
-        cornerList = domain%m_nodeElemCornerList(gnode)
+        cornerList = domain%m_nodeElemCornerList(gnode)  ! TODO (Ludger): The initialization of cornerList needs to be checked!!!
         fx_tmp = 0.0_RLK
         fy_tmp = 0.0_RLK
         fz_tmp = 0.0_RLK
@@ -1023,17 +1022,17 @@ CONTAINS
 
     REAL(KIND=8) :: coefficient, volinv, ss1, mass1, volume13
     REAL(KIND=8) :: hourmodx, hourmody, hourmodz
-    REAL(KIND=8) :: fx, fy, fz
-    REAL(KIND=8), DIMENSION(0:7) :: hgfx, hgfy, hgfz
-    REAL(KIND=8), DIMENSION(0:7) :: xd1, yd1, zd1
-    REAL(KIND=8), DIMENSION(0:3) :: hourgam0, hourgam1, hourgam2, hourgam3
-    REAL(KIND=8), DIMENSION(0:3) :: hourgam4, hourgam5, hourgam6, hourgam7
-    REAL(KIND=8), DIMENSION(0:7,0:3) :: gamma
+    REAL(KIND=8) :: fx_tmp, fy_tmp, fz_tmp = 0.0_RLK
+    REAL(KIND=8), DIMENSION(1:8) :: hgfx, hgfy, hgfz
+    REAL(KIND=8), DIMENSION(1:8) :: xd1, yd1, zd1
+    REAL(KIND=8), DIMENSION(1:4, 1:8) :: hourgam
+    REAL(KIND=8), DIMENSION(1:8, 1:4) :: gamma
     REAL(KIND=8), DIMENSION(:), POINTER :: fx_elem, fy_elem, fz_elem
     REAL(KIND=8), DIMENSION(:), POINTER :: fx_local, fy_local, fz_local
     INTEGER(KIND=4) :: numElem, numElem8, i, i2, i3, i1
-    INTEGER(KIND=4) :: numNode, gnode, elem, count, start
-    INTEGER(KIND=4) :: n0si2, n1si2, n2si2, n3si2, n4si2, n5si2, n6si2, n7si2
+    INTEGER(KIND=4) :: numNode = domain%m_numNode
+    INTEGER(KIND=4) :: gnode, elem, count, start
+    INTEGER(KIND=4) :: n1si2, n2si2, n3si2, n4si2, n5si2, n6si2, n7si2, n8si2
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode => NULL()
     INTEGER :: numthreads
 
@@ -1047,96 +1046,100 @@ CONTAINS
     NULLIFY(fx_elem, fy_elem, fz_elem)
     numElem = domain%m_numElem
     numElem8 = numElem * 8
-    ALLOCATE(fx_elem(0:numElem8-1))
-    ALLOCATE(fy_elem(0:numElem8-1))
-    ALLOCATE(fz_elem(0:numElem8-1))
+    
 
-    gamma(0,0) = ( 1.0_RLK)
-    gamma(1,0) = ( 1.0_RLK)
-    gamma(2,0) = (-1.0_RLK)
-    gamma(3,0) = (-1.0_RLK)
-    gamma(4,0) = (-1.0_RLK)
-    gamma(5,0) = (-1.0_RLK)
-    gamma(6,0) = ( 1.0_RLK)
-    gamma(7,0) = ( 1.0_RLK)
-    gamma(0,1) = ( 1.0_RLK)
-    gamma(1,1) = (-1.0_RLK)
-    gamma(2,1) = (-1.0_RLK)
-    gamma(3,1) = ( 1.0_RLK)
-    gamma(4,1) = (-1.0_RLK)
-    gamma(5,1) = ( 1.0_RLK)
-    gamma(6,1) = ( 1.0_RLK)
-    gamma(7,1) = (-1.0_RLK)
-    gamma(0,2) = ( 1.0_RLK)
-    gamma(1,2) = (-1.0_RLK)
-    gamma(2,2) = ( 1.0_RLK)
-    gamma(3,2) = (-1.0_RLK)
-    gamma(4,2) = ( 1.0_RLK)
-    gamma(5,2) = (-1.0_RLK)
-    gamma(6,2) = ( 1.0_RLK)
-    gamma(7,2) = (-1.0_RLK)
-    gamma(0,3) = (-1.0_RLK)
-    gamma(1,3) = ( 1.0_RLK)
-    gamma(2,3) = (-1.0_RLK)
-    gamma(3,3) = ( 1.0_RLK)
-    gamma(4,3) = ( 1.0_RLK)
-    gamma(5,3) = (-1.0_RLK)
-    gamma(6,3) = ( 1.0_RLK)
-    gamma(7,3) = (-1.0_RLK)
+    IF (numthreads > 1) THEN
+      ALLOCATE(fx_elem(1:numElem8))
+      ALLOCATE(fy_elem(1:numElem8))
+      ALLOCATE(fz_elem(1:numElem8))
+    ENDIF
+
+    gamma(1,1) =  1.0_RLK
+    gamma(2,1) =  1.0_RLK
+    gamma(3,1) = -1.0_RLK
+    gamma(4,1) = -1.0_RLK
+    gamma(5,1) = -1.0_RLK
+    gamma(6,1) = -1.0_RLK
+    gamma(7,1) =  1.0_RLK
+    gamma(8,1) =  1.0_RLK
+    gamma(1,2) =  1.0_RLK
+    gamma(2,2) = -1.0_RLK
+    gamma(3,2) = -1.0_RLK
+    gamma(4,2) =  1.0_RLK
+    gamma(5,2) = -1.0_RLK
+    gamma(6,2) =  1.0_RLK
+    gamma(7,2) =  1.0_RLK
+    gamma(8,2) = -1.0_RLK
+    gamma(1,3) =  1.0_RLK
+    gamma(2,3) = -1.0_RLK
+    gamma(3,3) =  1.0_RLK
+    gamma(4,3) = -1.0_RLK
+    gamma(5,3) =  1.0_RLK
+    gamma(6,3) = -1.0_RLK
+    gamma(7,3) =  1.0_RLK
+    gamma(8,3) = -1.0_RLK
+    gamma(1,4) = -1.0_RLK
+    gamma(2,4) =  1.0_RLK
+    gamma(3,4) = -1.0_RLK
+    gamma(4,4) =  1.0_RLK
+    gamma(5,4) =  1.0_RLK
+    gamma(6,4) = -1.0_RLK
+    gamma(7,4) =  1.0_RLK
+    gamma(8,4) = -1.0_RLK
 
   ! *************************************************
   ! compute the hourglass modes
 
     !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem, hourg)
-    DO i2=0, numElem-1
+    DO i2=1, numElem
 
-      elemToNode => domain%m_nodelist(i2*8:)
+      elemToNode => domain%m_nodelist(i2)  !- 1-based indexing watch out!
 
       i3=8*i2
       volinv= (1.0_RLK)/determ(i2)
 
-      DO i1=0, 3
+      DO i1=1, 4
 
         hourmodx =                                             &
-          x8n(i3)   * gamma(0,i1) + x8n(i3+1) * gamma(1,i1) +  &
-          x8n(i3+2) * gamma(2,i1) + x8n(i3+3) * gamma(3,i1) +  &
-          x8n(i3+4) * gamma(4,i1) + x8n(i3+5) * gamma(5,i1) +  &
-          x8n(i3+6) * gamma(6,i1) + x8n(i3+7) * gamma(7,i1)
+          x8n(i3)   * gamma(1,i1) + x8n(i3+1) * gamma(2,i1) +  &
+          x8n(i3+2) * gamma(3,i1) + x8n(i3+3) * gamma(4,i1) +  &
+          x8n(i3+4) * gamma(5,i1) + x8n(i3+5) * gamma(6,i1) +  &
+          x8n(i3+6) * gamma(7,i1) + x8n(i3+7) * gamma(8,i1)
 
         hourmody =                                             &
-          y8n(i3)   * gamma(0,i1) + y8n(i3+1) * gamma(1,i1) +  &
-          y8n(i3+2) * gamma(2,i1) + y8n(i3+3) * gamma(3,i1) +  &
-          y8n(i3+4) * gamma(4,i1) + y8n(i3+5) * gamma(5,i1) +  &
-          y8n(i3+6) * gamma(6,i1) + y8n(i3+7) * gamma(7,i1)
+          y8n(i3)   * gamma(1,i1) + y8n(i3+1) * gamma(2,i1) +  &
+          y8n(i3+2) * gamma(3,i1) + y8n(i3+3) * gamma(4,i1) +  &
+          y8n(i3+4) * gamma(5,i1) + y8n(i3+5) * gamma(6,i1) +  &
+          y8n(i3+6) * gamma(7,i1) + y8n(i3+7) * gamma(8,i1)
 
         hourmodz =                                             &
-          z8n(i3)   * gamma(0,i1) + z8n(i3+1) * gamma(1,i1) +  &
-          z8n(i3+2) * gamma(2,i1) + z8n(i3+3) * gamma(3,i1) +  &
-          z8n(i3+4) * gamma(4,i1) + z8n(i3+5) * gamma(5,i1) +  &
-          z8n(i3+6) * gamma(6,i1) + z8n(i3+7) * gamma(7,i1)
+          z8n(i3)   * gamma(1,i1) + z8n(i3+1) * gamma(2,i1) +  &
+          z8n(i3+2) * gamma(3,i1) + z8n(i3+3) * gamma(4,i1) +  &
+          z8n(i3+4) * gamma(5,i1) + z8n(i3+5) * gamma(6,i1) +  &
+          z8n(i3+6) * gamma(7,i1) + z8n(i3+7) * gamma(8,i1)
 
-        hourgam0(i1) = gamma(0,i1) -  volinv*(dvdx(i3  ) * hourmodx +  &
-                      dvdy(i3  ) * hourmody + dvdz(i3  ) * hourmodz )
+        hourgam(i1, 1) = gamma(1,i1) -  volinv*(dvdx(i3) * hourmodx +  &
+                      dvdy(i3  ) * hourmody + dvdz(i3) * hourmodz )
 
-        hourgam1(i1) = gamma(1,i1) -  volinv*(dvdx(i3+1) * hourmodx +  &
+        hourgam(i1, 2) = gamma(2,i1) -  volinv*(dvdx(i3+1) * hourmodx +  &
                       dvdy(i3+1) * hourmody + dvdz(i3+1) * hourmodz )
 
-        hourgam2(i1) = gamma(2,i1) -  volinv*(dvdx(i3+2) * hourmodx +  &
+        hourgam(i1, 3) = gamma(3,i1) -  volinv*(dvdx(i3+2) * hourmodx +  &
                       dvdy(i3+2) * hourmody + dvdz(i3+2) * hourmodz )
 
-        hourgam3(i1) = gamma(3,i1) -  volinv*(dvdx(i3+3) * hourmodx +  &
+        hourgam(i1, 4) = gamma(4,i1) -  volinv*(dvdx(i3+3) * hourmodx +  &
                       dvdy(i3+3) * hourmody + dvdz(i3+3) * hourmodz )
 
-        hourgam4(i1) = gamma(4,i1) -  volinv*(dvdx(i3+4) * hourmodx +  &
+        hourgam(i1, 5) = gamma(5,i1) -  volinv*(dvdx(i3+4) * hourmodx +  &
                       dvdy(i3+4) * hourmody + dvdz(i3+4) * hourmodz )
 
-        hourgam5(i1) = gamma(5,i1) -  volinv*(dvdx(i3+5) * hourmodx +  &
+        hourgam(i1, 6) = gamma(6,i1) -  volinv*(dvdx(i3+5) * hourmodx +  &
                       dvdy(i3+5) * hourmody + dvdz(i3+5) * hourmodz )
 
-        hourgam6(i1) = gamma(6,i1) -  volinv*(dvdx(i3+6) * hourmodx +  &
+        hourgam(i1, 7) = gamma(7,i1) -  volinv*(dvdx(i3+6) * hourmodx +  &
                       dvdy(i3+6) * hourmody + dvdz(i3+6) * hourmodz )
 
-        hourgam7(i1) = gamma(7,i1) -  volinv*(dvdx(i3+7) * hourmodx +  &
+        hourgam(i1, 8) = gamma(8,i1) -  volinv*(dvdx(i3+7) * hourmodx +  &
                       dvdy(i3+7) * hourmody + dvdz(i3+7) * hourmodz )
 
       ENDDO
@@ -1144,20 +1147,19 @@ CONTAINS
       !   compute forces
       !   store forces into h arrays (force arrays)
 
-      ss1=domain%m_ss(i2)
-      mass1=domain%m_elemMass(i2)
-      volume13=CBRT(determ(i2))
+      ss1 = domain%m_ss(i2)
+      mass1 = domain%m_elemMass(i2)
+      volume13 = CBRT(determ(i2))
 
-      n0si2 = elemToNode(1)
-      n1si2 = elemToNode(2)
-      n2si2 = elemToNode(3)
-      n3si2 = elemToNode(4)
-      n4si2 = elemToNode(5)
-      n5si2 = elemToNode(6)
-      n6si2 = elemToNode(7)
-      n7si2 = elemToNode(8)
+      n1si2 = elemToNode(1)
+      n2si2 = elemToNode(2)
+      n3si2 = elemToNode(3)
+      n4si2 = elemToNode(4)
+      n5si2 = elemToNode(5)
+      n6si2 = elemToNode(6)
+      n7si2 = elemToNode(7)
+      n8si2 = elemToNode(8)
 
-      xd1(0) = domain%m_xd(n0si2)
       xd1(1) = domain%m_xd(n1si2)
       xd1(2) = domain%m_xd(n2si2)
       xd1(3) = domain%m_xd(n3si2)
@@ -1165,8 +1167,8 @@ CONTAINS
       xd1(5) = domain%m_xd(n5si2)
       xd1(6) = domain%m_xd(n6si2)
       xd1(7) = domain%m_xd(n7si2)
+      xd1(8) = domain%m_xd(n8si2)
 
-      yd1(0) = domain%m_yd(n0si2)
       yd1(1) = domain%m_yd(n1si2)
       yd1(2) = domain%m_yd(n2si2)
       yd1(3) = domain%m_yd(n3si2)
@@ -1174,8 +1176,8 @@ CONTAINS
       yd1(5) = domain%m_yd(n5si2)
       yd1(6) = domain%m_yd(n6si2)
       yd1(7) = domain%m_yd(n7si2)
+      yd1(8) = domain%m_yd(n8si2)
 
-      zd1(0) = domain%m_zd(n0si2)
       zd1(1) = domain%m_zd(n1si2)
       zd1(2) = domain%m_zd(n2si2)
       zd1(3) = domain%m_zd(n3si2)
@@ -1183,73 +1185,100 @@ CONTAINS
       zd1(5) = domain%m_zd(n5si2)
       zd1(6) = domain%m_zd(n6si2)
       zd1(7) = domain%m_zd(n7si2)
+      zd1(8) = domain%m_zd(n8si2)
 
       coefficient = - hourg * (0.01_RLK) * ss1 * mass1 / volume13
 
       CALL CalcElemFBHourglassForce(xd1,yd1,zd1,                          &
-                                    hourgam0,hourgam1,hourgam2,hourgam3,  &
-                                    hourgam4,hourgam5,hourgam6,hourgam7,  &
-                                    coefficient, hgfx, hgfy, hgfz)
+                                    hourgam, coefficient,                 &
+                                    hgfx, hgfy, hgfz)
 
-      fx_local(0:) => fx_elem(i3:)
-      fx_local(0) = hgfx(0)
-      fx_local(1) = hgfx(1)
-      fx_local(2) = hgfx(2)
-      fx_local(3) = hgfx(3)
-      fx_local(4) = hgfx(4)
-      fx_local(5) = hgfx(5)
-      fx_local(6) = hgfx(6)
-      fx_local(7) = hgfx(7)
+      IF (numthreads > 1) THEN
+        fx_local(1:) => fx_elem(i3:)
+        fx_local(1) = hgfx(1)
+        fx_local(2) = hgfx(2)
+        fx_local(3) = hgfx(3)
+        fx_local(4) = hgfx(4)
+        fx_local(5) = hgfx(5)
+        fx_local(6) = hgfx(6)
+        fx_local(7) = hgfx(7)
+        fx_local(8) = hgfx(8)
 
-      fy_local(0:) => fy_elem(i3:)
-      fy_local(0) = hgfy(0)
-      fy_local(1) = hgfy(1)
-      fy_local(2) = hgfy(2)
-      fy_local(3) = hgfy(3)
-      fy_local(4) = hgfy(4)
-      fy_local(5) = hgfy(5)
-      fy_local(6) = hgfy(6)
-      fy_local(7) = hgfy(7)
+        fy_local(1:) => fy_elem(i3:)
+        fy_local(1) = hgfy(1)
+        fy_local(2) = hgfy(2)
+        fy_local(3) = hgfy(3)
+        fy_local(4) = hgfy(4)
+        fy_local(5) = hgfy(5)
+        fy_local(6) = hgfy(6)
+        fy_local(7) = hgfy(7)
+        fy_local(8) = hgfy(8)
 
-      fz_local(0:) => fz_elem(i3:)
-      fz_local(0) = hgfz(0)
-      fz_local(1) = hgfz(1)
-      fz_local(2) = hgfz(2)
-      fz_local(3) = hgfz(3)
-      fz_local(4) = hgfz(4)
-      fz_local(5) = hgfz(5)
-      fz_local(6) = hgfz(6)
-      fz_local(7) = hgfz(7)
+        fz_local(1:) => fz_elem(i3:)
+        fz_local(1) = hgfz(1)
+        fz_local(2) = hgfz(2)
+        fz_local(3) = hgfz(3)
+        fz_local(4) = hgfz(4)
+        fz_local(5) = hgfz(5)
+        fz_local(6) = hgfz(6)
+        fz_local(7) = hgfz(7)
+        fz_local(8) = hgfz(8)
+      ELSE
+        domain%m_fx(n1si2) = domain%m_fx(n1si2) + hgfx(1)
+        domain%m_fy(n1si2) = domain%m_fy(n1si2) + hgfy(1)
+        domain%m_fz(n1si2) = domain%m_fz(n1si2) + hgfz(1)
+
+        domain%m_fx(n2si2) = domain%m_fx(n2si2) + hgfx(2)
+        domain%m_fy(n2si2) = domain%m_fy(n2si2) + hgfy(2)
+        domain%m_fz(n2si2) = domain%m_fz(n2si2) + hgfz(2)
+        
+        domain%m_fx(n3si2) = domain%m_fx(n3si2) + hgfx(3)
+        domain%m_fy(n3si2) = domain%m_fy(n3si2) + hgfy(3)
+        domain%m_fz(n3si2) = domain%m_fz(n3si2) + hgfz(3)
+
+        domain%m_fx(n4si2) = domain%m_fx(n4si2) + hgfx(4)
+        domain%m_fy(n4si2) = domain%m_fy(n4si2) + hgfy(4)
+        domain%m_fz(n4si2) = domain%m_fz(n4si2) + hgfz(4)
+        
+        domain%m_fx(n5si2) = domain%m_fx(n5si2) + hgfx(5)
+        domain%m_fy(n5si2) = domain%m_fy(n5si2) + hgfy(5)
+        domain%m_fz(n5si2) = domain%m_fz(n5si2) + hgfz(5)
+        
+        domain%m_fx(n6si2) = domain%m_fx(n6si2) + hgfx(6)
+        domain%m_fy(n6si2) = domain%m_fy(n6si2) + hgfy(6)
+        domain%m_fz(n6si2) = domain%m_fz(n6si2) + hgfz(6)
+        
+        domain%m_fx(n7si2) = domain%m_fx(n7si2) + hgfx(7)
+        domain%m_fy(n7si2) = domain%m_fy(n7si2) + hgfy(7)
+        domain%m_fz(n7si2) = domain%m_fz(n7si2) + hgfz(7)
+        
+        domain%m_fx(n8si2) = domain%m_fx(n8si2) + hgfx(8)
+        domain%m_fy(n8si2) = domain%m_fy(n8si2) + hgfy(8)
+        domain%m_fz(n8si2) = domain%m_fz(n8si2) + hgfz(8)
+      ENDIF
     ENDDO
     !  !$OMP END PARALLEL DO
 
-    numNode = domain%m_numNode  !-> How does this fit into the picture here?
-
-    ! Valid argument can be made that this is where the seg-fault happens
-    ! But still contending with errors coming out of the nodeElemCornerList's indexing
-
-!  !$OMP PARALLEL DO FIRSTPRIVATE(numNode)
-    DO gnode=0, numNode-1
-      count = domain%m_nodeElemCount(gnode)
-      start = domain%m_nodeElemStart(gnode)
-      fx = (0.0_RLK)
-      fy = (0.0_RLK)
-      fz = (0.0_RLK)
-      DO i = 0, count-1
-        elem = domain%m_nodeElemCornerList(start+i)
-        fx = fx + fx_elem(elem)
-        fy = fy + fy_elem(elem)
-        fz = fz + fz_elem(elem)
+    IF (numthreads > 1) THEN
+      DO gnode=1, numNode
+        count = domain%m_nodeElemCount(gnode)
+        cornerList = domain%m_nodeElemCornerList(gnode)  ! TODO(Ludger): How large does cornerList need to be preallocated for?
+        DO i=1, count
+          ielem = cornerList(i)
+          fx_tmp = fx_tmp + fx_elem[ielem]
+          fy_tmp = fy_tmp + fy_elem[ielem]
+          fz_tmp = fz_tmp + fz_elem[ielem]
+        ENDDO
+        domain%m_fx(gnode) = domain%m_fx(gnode) + fx_tmp
+        domain%m_fy(gnode) = domain%m_fy(gnode) + fy_tmp
+        domain%m_fz(gnode) = domain%m_fz(gnode) + fz_tmp
       ENDDO
-      domain%m_fx(gnode) = domain%m_fx(gnode) + fx
-      domain%m_fy(gnode) = domain%m_fy(gnode) + fy
-      domain%m_fz(gnode) = domain%m_fz(gnode) + fz
-    ENDDO
-!  !$OMP END PARALLEL DO
 
-    DEALLOCATE(fz_elem)
-    DEALLOCATE(fy_elem)
-    DEALLOCATE(fx_elem)
+      ! Deallocate the elems
+      DEALLOCATE(fz_elem)
+      DEALLOCATE(fy_elem)
+      DEALLOCATE(fx_elem)
+    ENDIF
 
   END SUBROUTINE CalcFBHourglassForceForElems
 
