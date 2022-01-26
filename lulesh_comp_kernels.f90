@@ -720,14 +720,15 @@ CONTAINS
     REAL(KIND=8),DIMENSION(0:), INTENT(INOUT) :: determ
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
-    REAL(KIND=8) :: fx, fy, fz
+    REAL(KIND=8) :: fx_local, fy_local, fz_local, fx_tmp, fy_tmp, fz_tmp
+    REAL(KIND=8) :: x_local, y_local, z_local
     REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: fx_elem, fy_elem, fz_elem
-    REAL(KIND=8),DIMENSION(0:7,0:2) :: B   ! shape function derivatives
-    REAL(KIND=8),DIMENSION(0:7)   :: x_local
-    REAL(KIND=8),DIMENSION(0:7)   :: y_local
-    REAL(KIND=8),DIMENSION(0:7)   :: z_local
+    REAL(KIND=8),DIMENSION(1:8,1:3) :: B   ! shape function derivatives
+    REAL(KIND=8),DIMENSION(1:8)   :: x_local
+    REAL(KIND=8),DIMENSION(1:8)   :: y_local
+    REAL(KIND=8),DIMENSION(1:8)   :: z_local
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemNodes => NULL()
-    INTEGER      :: lnode, gnode, count, start, elem, kk
+    INTEGER      :: lnode, gnode, count, cornerList, ielem, kk
     INTEGER      :: numNode, numElem8
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4) :: numthreads
@@ -739,61 +740,71 @@ CONTAINS
 #endif
 
     numElem8 = numElem * 8
-    ALLOCATE(fx_elem(0:numElem8-1))
-    ALLOCATE(fy_elem(0:numElem8-1))
-    ALLOCATE(fz_elem(0:numElem8-1))
+    IF (numthreads  > 1) THEN
+      ! Is this right? - Unsure about the allocation
+      ALLOCATE(fx_elem(1:numElem8))
+      ALLOCATE(fy_elem(1:numElem8))
+      ALLOCATE(fz_elem(1:numElem8))
+    ENDIF
+    
 
     !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
     DO kk=0, numElem-1
-      elemNodes => domain%m_nodelist(kk*8:)
+      elemToNode => domain%m_nodelist(kk*8:)  ! Why the kk*8 here?
 
       ! Get nodal coordinates from global arrays and copy into local arrays.
-      DO lnode=0, 7
-        gnode = elemNodes(lnode+1)
-        x_local(lnode) = domain%m_x(gnode)
-        y_local(lnode) = domain%m_y(gnode)
-        z_local(lnode) = domain%m_z(gnode)
-      ENDDO
+      Call CollectDomainNodesToElemNodes(domain, elemToNode, x_local, y_local, z_local)
 
       ! Volume calculation involves extra work for numerical consistency.
       CALL CalcElemShapeFunctionDerivatives(x_local, y_local, z_local, &
                                             B, determ(kk))
 
-      CALL CalcElemNodeNormals( B(:,0) , B(:,1), B(:,2), x_local, y_local, z_local )
+      CALL CalcElemNodeNormals(B(:,1) , B(:,2), B(:,3), x_local, y_local, z_local)
 
-      ! Don't I actually need that if-else construct here as
-      ! it defaults to the >1 threads version
-      CALL SumElemStressesToNodeForces( B, sigxx(kk), sigyy(kk), sigzz(kk),  &
-                                      fx_elem(kk*8), fy_elem(kk*8), fz_elem(kk*8) )
+      IF ( numthreads > 1) THEN
+        ! Eliminate thread writing conflicts at the nodes by giving
+        ! each element its own copy of the data.
+        CALL SumElemStressesToNodeForces(B, sigxx(kk), sigyy(kk), sigzz(kk), &
+                                         fx_elem, fy_elem, fz_elem)
+      ELSE
+        CALL SumElemStressesToNodeForces(B, sigxx(kk), sigyy(kk), sigzz(kk), &
+                                         fx_local, fy_local, fz_local)
+
+        ! Copy nodal force contributions to global force array
+        DO lnode=1, 8
+          gnode = elemToNode(lnode)
+          domain%m_fx(gnode) = domain%m_fx(gnode) + fx_local(lnode)
+          domain%m_fy(gnode) = domain%m_fy(gnode) + fy_local(lnode)
+          domain%m_fz(gnode) = domain%m_fz(gnode) + fz_local(lnode)
+        END DO
+      ENDIF
     ENDDO
     !  !$OMP END PARALLEL DO
 
-    ! Not entirely sure, how I am supposed to treat this one here
+    ! Get numNode
     numNode = domain%m_numNode
 
-!$OMP PARALLEL DO DEFAULT(NONE)
-!  !$OMP PARALLEL DO PRIVATE(count, start, fx, fy, fz, elem, i)
-    DO gnode=0, numNode-1
-      count = domain%m_nodeElemCount(gnode)
-      start = domain%m_nodeElemStart(gnode)
-      fx = (0.0_RLK)
-      fy = (0.0_RLK)
-      fz = (0.0_RLK)
-      DO i=0, count-1
-        elem = domain%m_nodeElemCornerList(start+i)
-        fx = fx + fx_elem(elem)
-        fy = fy + fy_elem(elem)
-        fz = fz + fz_elem(elem)
-      ENDDO
-      domain%m_fx(gnode) = fx
-      domain%m_fy(gnode) = fy
-      domain%m_fz(gnode) = fz
-    ENDDO
-!  !$OMP END PARALLEL DO
-
-    DEALLOCATE(fz_elem)
-    DEALLOCATE(fy_elem)
-    DEALLOCATE(fx_elem)
+    IF (numthreads > 1) THEN
+      DO gnode=1, numNode
+        count = domain%m_nodeElemCount(gnode)
+        cornerList = domain%m_nodeElemCornerList(gnode)
+        fx_tmp = 0.0_RLK
+        fy_tmp = 0.0_RLK
+        fz_tmp = 0.0_RLK
+        DO i=1, count
+          ielem = cornerList(i)
+          fx_tmp = fx_tmp + fx_elem(ielem)
+          fy_tmp = fy_tmp + fy_elem(ielem)
+          fz_tmp = fz_tmp + fz_elem(ielem)
+        END DO
+        domain%m_fx(gnode) = fx_tmp
+        domain%m_fy(gnode) = fy_tmp
+        domain%m_fz(gnode) = fz_tmp
+      END DO
+      DEALLOCATE(fx_elem)
+      DEALLOCATE(fy_elem)
+      DEALLOCATE(fz_elem)
+    ENDIF
 
   END SUBROUTINE IntegrateStressForElems
 
@@ -849,36 +860,36 @@ CONTAINS
 
 
 
-  SUBROUTINE VoluDer(x0, x1, x2,      &
-                     x3, x4, x5,      &
-                     y0, y1, y2,      &
-                     y3, y4, y5,      &
-                     z0, z1, z2,      &
-                     z3, z4, z5,      &
+  SUBROUTINE VoluDer(x1, x2, x3,      &
+                     x4, x5, x6,      &
+                     y1, y2, y3,      &
+                     y4, y5, y6,      &
+                     z1, z2, z3,      &
+                     z4, z5, z6,      &
                      dvdx, dvdy, dvdz )
     IMPLICIT NONE
-    REAL(KIND=8) :: x0, x1, x2, x3, x4, x5
-    REAL(KIND=8) :: y0, y1, y2, y3, y4, y5
-    REAL(KIND=8) :: z0, z1, z2, z3, z4, z5
+    REAL(KIND=8) :: x1, x2, x3, x4, x5, x6
+    REAL(KIND=8) :: y1, y2, y3, y4, y5, y6
+    REAL(KIND=8) :: z1, z2, z3, z4, z5, z6
     REAL(KIND=8) :: dvdx, dvdy, dvdz
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8), PARAMETER :: twelfth = 1.0_RLK / 12.0_RLK
 
     dvdx =                                              &
-      (y1 + y2) * (z0 + z1) - (y0 + y1) * (z1 + z2) +   &
-      (y0 + y4) * (z3 + z4) - (y3 + y4) * (z0 + z4) -   &
-      (y2 + y5) * (z3 + z5) + (y3 + y5) * (z2 + z5)
+      (y2 + y3) * (z1 + z2) - (y1 + y2) * (z2 + z3) +   &
+      (y1 + y5) * (z4 + z5) - (y4 + y5) * (z1 + z5) -   &
+      (y3 + y6) * (z4 + z6) + (y4 + y6) * (z3 + z6)
 
     dvdy =                                              &
-      - (x1 + x2) * (z0 + z1) + (x0 + x1) * (z1 + z2) - &
-      (x0 + x4) * (z3 + z4) + (x3 + x4) * (z0 + z4) +   &
-      (x2 + x5) * (z3 + z5) - (x3 + x5) * (z2 + z5)
+      - (x2 + x3) * (z1 + z2) + (x1 + x2) * (z2 + z3) - &
+      (x1 + x5) * (z4 + z6) + (x4 + x5) * (z1 + z5) +   &
+      (x3 + x6) * (z4 + z6) - (x4 + x6) * (z3 + z6)
 
     dvdz =                                              &
-      - (y1 + y2) * (x0 + x1) + (y0 + y1) * (x1 + x2) - &
-      (y0 + y4) * (x3 + x4) + (y3 + y4) * (x0 + x4) +   &
-      (y2 + y5) * (x3 + x5) - (y3 + y5) * (x2 + x5)
+      - (y2 + y3) * (x1 + x2) + (y1 + y2) * (x2 + x3) - &
+      (y1 + y5) * (x4 + x5) + (y4 + y5) * (x1 + x5) +   &
+      (y3 + y6) * (x4 + x6) - (y4 + y6) * (x3 + x6)
 
     dvdx = dvdx * twelfth
     dvdy = dvdy * twelfth
@@ -891,59 +902,53 @@ CONTAINS
   SUBROUTINE CalcElemVolumeDerivative(dvdx, dvdy, dvdz, x, y, z)
     IMPLICIT NONE
 
-    REAL(KIND=8),DIMENSION(0:7) :: dvdx, dvdy, dvdz
-    REAL(KIND=8),DIMENSION(0:7) :: x, y, z
+    REAL(KIND=8),DIMENSION(1:8) :: dvdx, dvdy, dvdz
+    REAL(KIND=8),DIMENSION(1:8) :: x, y, z
 
-    CALL VoluDer(x(1), x(2), x(3), x(4), x(5), x(7),  &
-                 y(1), y(2), y(3), y(4), y(5), y(7),  &
-                 z(1), z(2), z(3), z(4), z(5), z(7),  &
-                 dvdx(0), dvdy(0), dvdz(0))
-    CALL VoluDer(x(0), x(1), x(2), x(7), x(4), x(6),  &
-                 y(0), y(1), y(2), y(7), y(4), y(6),  &
-                 z(0), z(1), z(2), z(7), z(4), z(6),  &
-                 dvdx(3), dvdy(3), dvdz(3))
-    CALL VoluDer(x(3), x(0), x(1), x(6), x(7), x(5),  &
-                 y(3), y(0), y(1), y(6), y(7), y(5),  &
-                 z(3), z(0), z(1), z(6), z(7), z(5),  &
-                 dvdx(2), dvdy(2), dvdz(2))
-    CALL VoluDer(x(2), x(3), x(0), x(5), x(6), x(4),  &
-                 y(2), y(3), y(0), y(5), y(6), y(4),  &
-                 z(2), z(3), z(0), z(5), z(6), z(4),  &
+    CALL VoluDer(x(2), x(3), x(4), x(5), x(6), x(8),  &
+                 y(2), y(3), y(4), y(5), y(6), y(8),  &
+                 z(2), z(3), z(4), z(5), z(6), z(8),  &
                  dvdx(1), dvdy(1), dvdz(1))
-    CALL VoluDer(x(7), x(6), x(5), x(0), x(3), x(1),  &
-                 y(7), y(6), y(5), y(0), y(3), y(1),  &
-                 z(7), z(6), z(5), z(0), z(3), z(1),  &
+    CALL VoluDer(x(1), x(2), x(3), x(8), x(5), x(7),  &
+                 y(1), y(2), y(3), y(8), y(5), y(7),  &
+                 z(1), z(2), z(3), z(8), z(5), z(7),  &
                  dvdx(4), dvdy(4), dvdz(4))
-    CALL VoluDer(x(4), x(7), x(6), x(1), x(0), x(2),  &
-                 y(4), y(7), y(6), y(1), y(0), y(2),  &
-                 z(4), z(7), z(6), z(1), z(0), z(2),  &
+    CALL VoluDer(x(4), x(1), x(2), x(7), x(8), x(6),  &
+                 y(4), y(1), y(2), y(7), y(8), y(6),  &
+                 z(4), z(1), z(2), z(7), z(8), z(6),  &
+                 dvdx(3), dvdy(3), dvdz(3))
+    CALL VoluDer(x(3), x(4), x(1), x(6), x(7), x(5),  &
+                 y(3), y(4), y(1), y(6), y(7), y(5),  &
+                 z(3), z(4), z(1), z(6), z(7), z(5),  &
+                 dvdx(2), dvdy(2), dvdz(2))
+    CALL VoluDer(x(8), x(7), x(6), x(1), x(4), x(2),  &
+                 y(8), y(7), y(6), y(1), y(4), y(2),  &
+                 z(8), z(7), z(6), z(1), z(4), z(2),  &
                  dvdx(5), dvdy(5), dvdz(5))
-    CALL VoluDer(x(5), x(4), x(7), x(2), x(1), x(3),  &
-                 y(5), y(4), y(7), y(2), y(1), y(3),  &
-                 z(5), z(4), z(7), z(2), z(1), z(3),  &
+    CALL VoluDer(x(5), x(8), x(7), x(2), x(1), x(3),  &
+                 y(5), y(8), y(7), y(2), y(1), y(3),  &
+                 z(5), z(8), z(7), z(2), z(1), z(3),  &
                  dvdx(6), dvdy(6), dvdz(6))
-    CALL VoluDer(x(6), x(5), x(4), x(3), x(2), x(0),  &
-                 y(6), y(5), y(4), y(3), y(2), y(0),  &
-                 z(6), z(5), z(4), z(3), z(2), z(0),  &
+    CALL VoluDer(x(6), x(5), x(8), x(3), x(2), x(4),  &
+                 y(6), y(5), y(8), y(3), y(2), y(4),  &
+                 z(6), z(5), z(8), z(3), z(2), z(4),  &
                  dvdx(7), dvdy(7), dvdz(7))
+    CALL VoluDer(x(7), x(6), x(5), x(4), x(3), x(1),  &
+                 y(7), y(6), y(5), y(4), y(3), y(1),  &
+                 z(7), z(6), z(5), z(4), z(3), z(1),  &
+                 dvdx(8), dvdy(8), dvdz(8))
 
   END SUBROUTINE CalcElemVolumeDerivative
 
 
 
   SUBROUTINE CalcElemFBHourglassForce(xd, yd, zd, &
-                                      hourgam0, hourgam1, &
-                                      hourgam2, hourgam3, &
-                                      hourgam4, hourgam5, &
-                                      hourgam6, hourgam7, &
+                                      hourgam, &
                                       coefficient, hgfx,  &
                                       hgfy, hgfz          )
     IMPLICIT NONE
-    REAL(KIND=8), DIMENSION(0:7) :: xd,yd,zd
-    REAL(KIND=8), DIMENSION(0:3) :: hourgam0, hourgam1,  &
-                                    hourgam2, hourgam3,  &
-                                    hourgam4, hourgam5,  &
-                                    hourgam6, hourgam7
+    REAL(KIND=8), DIMENSION(1:8) :: xd,yd,zd
+    REAL(KIND=8), DIMENSION(1:4,1:8) :: hourgam
     REAL(KIND=8) :: coefficient
     REAL(KIND=8),DIMENSION(0:7) :: hgfx,hgfy,hgfz
     REAL(KIND=8) :: h00,h01,h02,h03
