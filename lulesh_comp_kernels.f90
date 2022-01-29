@@ -37,12 +37,12 @@ PRIVATE
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_nodeElemCount 
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_nodeElemStart 
     !   INTEGER,     DIMENSION(:), ALLOCATABLE ::m_nodeElemList 
-    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_nodeElemCornerList 
+    INTEGER,     DIMENSION(:,:), ALLOCATABLE ::m_nodeElemCornerList 
   
     ! Element-centered 
   
     INTEGER,     DIMENSION(:), ALLOCATABLE :: m_matElemlist   ! material indexset 
-    INTEGER,     DIMENSION(:), POINTER     :: m_nodelist => NULL()  ! elemToNode connectivity 
+    INTEGER,     DIMENSION(:,:), POINTER   :: m_nodelist => NULL()  ! elemToNode connectivity 
   
     INTEGER,     DIMENSION(:), ALLOCATABLE :: m_lxim   ! element connectivity across each face 
     INTEGER,     DIMENSION(:), ALLOCATABLE :: m_lxip 
@@ -135,7 +135,10 @@ PRIVATE
   PUBLIC :: domain_type
   PUBLIC :: AllocateNodalPersistent
   PUBLIC :: AllocateElemPersistent
-  PUBLIC :: AllocateElemTemporary
+  PUBLIC :: AllocateGradients
+  PUBLIC :: DeallocateGradients
+  PUBLIC :: AllocateStrains
+  PUBLIC :: DeallocateStrains
   PUBLIC :: AllocateNodesets
   PUBLIC :: AllocateNodeElemIndexes
   PUBLIC :: TimeIncrement
@@ -184,126 +187,168 @@ PRIVATE
   PUBLIC :: CalcElemVolume
   PUBLIC :: TRIPLE_PRODUCT
   PUBLIC :: AreaFace
-  PUBLIC :: SUM4
 
 CONTAINS
 
-  SUBROUTINE AllocateNodalPersistent(domain, size)
+  SUBROUTINE AllocateNodalPersistent(domain, numNode)
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    INTEGER :: size
+    INTEGER :: numNode
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
-    ALLOCATE(domain%m_x(0:size-1))
-    ALLOCATE(domain%m_y(0:size-1)) 
-    ALLOCATE(domain%m_z(0:size-1)) 
+    ! Coordinates
+    ALLOCATE(domain%m_x(0:numNode-1))
+    ALLOCATE(domain%m_y(0:numNode-1)) 
+    ALLOCATE(domain%m_z(0:numNode-1)) 
 
-    ALLOCATE(domain%m_xd(0:size-1)) 
-    ALLOCATE(domain%m_yd(0:size-1)) 
-    ALLOCATE(domain%m_zd(0:size-1)) 
-    domain%m_xd = 0.0_RLK  ! Is this right? Not there in the C++ version
-    domain%m_yd = 0.0_RLK  ! Is this right? Not there in the C++ version
-    domain%m_zd = 0.0_RLK  ! Is this right? Not there in the C++ version
-
-    ALLOCATE(domain%m_xdd(0:size-1)) 
-    ALLOCATE(domain%m_ydd(0:size-1)) 
-    ALLOCATE(domain%m_zdd(0:size-1)) 
-    domain%m_xdd = 0.0_RLK  ! Is this right? Not there in the C++ version
-    domain%m_ydd = 0.0_RLK  ! Is this right? Not there in the C++ version
-    domain%m_zdd = 0.0_RLK  ! Is this right? Not there in the C++ version
-
-    ALLOCATE(domain%m_fx(0:size-1)) 
+    ! Velocities
+    ALLOCATE(domain%m_xd(0:numNode-1)) 
+    ALLOCATE(domain%m_yd(0:numNode-1)) 
+    ALLOCATE(domain%m_zd(0:numNode-1)) 
     
-    ALLOCATE(domain%m_fz(0:size-1)) 
+    ! Acceleration
+    ALLOCATE(domain%m_xdd(0:numNode-1)) 
+    ALLOCATE(domain%m_ydd(0:numNode-1)) 
+    ALLOCATE(domain%m_zdd(0:numNode-1)) 
 
-    ALLOCATE(domain%m_nodalMass(0:size-1))
-    domain%m_nodalMass = 0.0_RLK  ! Is this right? Not there in the C++ version
+    ! Forces
+    ALLOCATE(domain%m_fx(0:numNode-1)) 
+    ALLOCATE(domain%m_fy(0:numNode-1)) 
+    ALLOCATE(domain%m_fz(0:numNode-1)) 
+
+    ALLOCATE(domain%m_nodalMass(0:numNode-1))
+
+    !domain%m_xd = 0.0_RLK  ! Is this right? Not there in the C++ version
+    !domain%m_yd = 0.0_RLK  ! Is this right? Not there in the C++ version
+    !domain%m_zd = 0.0_RLK  ! Is this right? Not there in the C++ version
+    !domain%m_xdd = 0.0_RLK  ! Is this right? Not there in the C++ version
+    !domain%m_ydd = 0.0_RLK  ! Is this right? Not there in the C++ version
+    !domain%m_zdd = 0.0_RLK  ! Is this right? Not there in the C++ version
+    !domain%m_nodalMass = 0.0_RLK  ! Is this right? Not there in the C++ version
 
   END SUBROUTINE AllocateNodalPersistent
 
 
-
-  SUBROUTINE AllocateElemPersistent(domain, size)
+  SUBROUTINE AllocateElemPersistent(domain, numElem)
     IMPLICIT NONE
    
-    TYPE(domain_type), INTENT(INOUT) :: domain  !<- A little unsure with the allocation here.
-    INTEGER :: size
+    TYPE(domain_type), INTENT(INOUT) :: domain
+    INTEGER :: numElem
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
-    ALLOCATE(domain%m_matElemlist(0:size-1)) 
-    ALLOCATE(domain%m_nodelist(0:8*size-1)) 
+    ALLOCATE(domain%m_matElemlist(0:numElem-1))   ! What do I need matElemlist for?
+    ALLOCATE(domain%m_nodelist(0:numElem-1, 0:7))
 
-    ALLOCATE(domain%m_lxim(0:size-1)) 
-    ALLOCATE(domain%m_lxip(0:size-1)) 
-    ALLOCATE(domain%m_letam(0:size-1)) 
-    ALLOCATE(domain%m_letap(0:size-1)) 
-    ALLOCATE(domain%m_lzetam(0:size-1)) 
-    ALLOCATE(domain%m_lzetap(0:size-1)) 
+    ALLOCATE(domain%m_lxim(0:numElem-1)) 
+    ALLOCATE(domain%m_lxip(0:numElem-1)) 
+    ALLOCATE(domain%m_letam(0:numElem-1)) 
+    ALLOCATE(domain%m_letap(0:numElem-1)) 
+    ALLOCATE(domain%m_lzetam(0:numElem-1)) 
+    ALLOCATE(domain%m_lzetap(0:numElem-1)) 
 
-    ALLOCATE(domain%m_elemBC(0:size-1)) 
+    ALLOCATE(domain%m_elemBC(0:numElem-1)) 
 
-    ALLOCATE(domain%m_e(0:size-1)) 
-    domain%m_e = 0.0_RLK  ! Is this correct here? Does not appear in C++ code.
-    ALLOCATE(domain%m_p(0:size-1)) 
-    domain%m_p = 0.0_RLK  ! Is this correct here? Does not appear in C++ code.
-    ALLOCATE(domain%m_q(0:size-1)) 
-    ALLOCATE(domain%m_ql(0:size-1)) 
-    ALLOCATE(domain%m_qq(0:size-1)) 
+    ALLOCATE(domain%m_e(0:numElem-1)) 
+    ALLOCATE(domain%m_p(0:numElem-1)) 
+    ALLOCATE(domain%m_q(0:numElem-1)) 
+    ALLOCATE(domain%m_ql(0:numElem-1)) 
+    ALLOCATE(domain%m_qq(0:numElem-1)) 
 
-    ALLOCATE(domain%m_v(0:size-1)) 
-    domain%m_v = 1.0_RLK  ! Is this correct here? Does not appear in C++ code.
-    ALLOCATE(domain%m_volo(0:size-1)) 
-    ALLOCATE(domain%m_delv(0:size-1)) 
-    ALLOCATE(domain%m_vdov(0:size-1)) 
+    ALLOCATE(domain%m_v(0:numElem-1)) 
+    ALLOCATE(domain%m_volo(0:numElem-1)) 
+    ALLOCATE(domain%m_delv(0:numElem-1)) 
+    ALLOCATE(domain%m_vdov(0:numElem-1)) 
 
-    ALLOCATE(domain%m_arealg(0:size-1)) 
-    ALLOCATE(domain%m_ss(0:size-1)) 
-    ALLOCATE(domain%m_elemMass(0:size-1))
+    ALLOCATE(domain%m_arealg(0:numElem-1)) 
+    ALLOCATE(domain%m_ss(0:numElem-1))
+    ALLOCATE(domain%m_elemMass(0:numElem-1))
 
-    ! What about the resizing of vnew here? It appears in the C++ code but is missing here. 
+    ALLOCATE(domain%m_vnew(0:numElem-1))
+
+    !domain%m_e = 0.0_RLK  ! Is this correct here? Does not appear in C++ code.
+    !domain%m_v = 1.0_RLK  ! Is this correct here? Does not appear in C++ code.
+    !domain%m_p = 0.0_RLK  ! Is this correct here? Does not appear in C++ code.
 
   END SUBROUTINE AllocateElemPersistent
 
 
+  SUBROUTINE AllocateGradients(domain, numElem, allElem)
+    IMPLICIT NONE
 
-  !Temporaries should not be initialized in bulk but
-  !this is a runnable placeholder for now
-  SUBROUTINE AllocateElemTemporary(domain, size)
-    IMPLICIT NONE 
-    INTEGER :: size
+    TYPE(domain_type), INTENT(INOUT) :: domain
+    INTEGER :: numElem, allElem
+
+    ! Position gradients
+    ALLOCATE(domain%m_delx_xi(0:numElem-1))
+    ALLOCATE(domain%m_delx_eta(0:numElem-1))
+    ALLOCATE(domain%m_delx_zeta(0:numElem-1))
+
+    ! Velocity gradients
+    ALLOCATE(domain%m_delv_xi(0:allElem-1))
+    ALLOCATE(domain%m_delv_eta(0:allElem-1))
+    ALLOCATE(domain%m_delv_zeta(0:allElem-1))
+
+  END SUBROUTINE AllocateGradients
+
+
+  SUBROUTINE DeallocateGradients(domain)
+    IMPLICIT NONE
+
     TYPE(domain_type), INTENT(INOUT) :: domain
 
-    ALLOCATE(domain%m_dxx(0:size-1))
-    ALLOCATE(domain%m_dyy(0:size-1))
-    ALLOCATE(domain%m_dzz(0:size-1))
+    DEALLOCATE(domain%m_delx_zeta)
+    DEALLOCATE(domain%m_delx_eta)
+    DEALLOCATE(domain%m_delx_xi)
 
-    ALLOCATE(domain%m_delv_xi(0:size-1))
-    ALLOCATE(domain%m_delv_eta(0:size-1))
-    ALLOCATE(domain%m_delv_zeta(0:size-1))
+    DEALLOCATE(domain%m_delv_zeta)
+    DEALLOCATE(domain%m_delv_eta)
+    DEALLOCATE(domain%m_delv_xi)
 
-    ALLOCATE(domain%m_delx_xi(0:size-1))
-    ALLOCATE(domain%m_delx_eta(0:size-1))
-    ALLOCATE(domain%m_delx_zeta(0:size-1))
-
-    ALLOCATE(domain%m_vnew(0:size-1))
-
-  END SUBROUTINE AllocateElemTemporary
+  END SUBROUTINE DeallocateGradients
 
 
+  SUBROUTINE AllocateStrains(domain, numElem)
+    IMPLICIT NONE
 
-  SUBROUTINE AllocateNodesets(domain, size)
-    IMPLICIT NONE 
-    INTEGER :: size
     TYPE(domain_type), INTENT(INOUT) :: domain
-    ALLOCATE(domain%m_symmX(0:size-1))
-    ALLOCATE(domain%m_symmY(0:size-1))
-    ALLOCATE(domain%m_symmZ(0:size-1))
+    INTEGER :: numElem
+
+    ! Strain
+    ALLOCATE(domain%m_dxx(0:numElem-1))
+    ALLOCATE(domain%m_dyy(0:numElem-1))
+    ALLOCATE(domain%m_dzz(0:numElem-1))
+
+  END SUBROUTINE
+
+
+  SUBROUTINE DeallocateStrains(domain)
+    IMPLICIT NONE
+
+    TYPE(domain_type), INTENT(INOUT) :: domain
+
+    DEALLOCATE(domain%m_dzz)
+    DEALLOCATE(domain%m_dyy)
+    DEALLOCATE(domain%m_dxx)
+
+  END SUBROUTINE DeallocateStrains
+
+
+  ! Really unsure about this one here!
+  SUBROUTINE AllocateNodesets(domain, numElem)
+    IMPLICIT NONE
+
+    TYPE(domain_type), INTENT(INOUT) :: domain
+    INTEGER :: numElem
+
+    ALLOCATE(domain%m_symmX(0:numElem-1))
+    ALLOCATE(domain%m_symmY(0:numElem-1))
+    ALLOCATE(domain%m_symmZ(0:numElem-1))
 
   END SUBROUTINE AllocateNodesets
 
 
-
+  ! Really unsure about this one here!
   SUBROUTINE AllocateNodeElemIndexes(domain)
     IMPLICIT NONE
 
@@ -341,6 +386,7 @@ CONTAINS
        domain%m_nodeElemStart(i) = domain%m_nodeElemStart(i-1) + domain%m_nodeElemCount(i-1)
     END DO
 
+    ! This needs to be initialized as an array!!  <- Error in here right now!
     ALLOCATE(domain%m_nodeElemCornerList(0:(domain%m_nodeElemStart(numNode-1) +  &
                                             domain%m_nodeElemCount(numNode-1))))
 
@@ -411,14 +457,10 @@ CONTAINS
           END IF
        END IF
 
-
        IF (newdt > domain%m_dtmax) THEN
           newdt = domain%m_dtmax
        END IF
-
        domain%m_deltatime = newdt
-
-       ! Do I need to advance 'domain' here?!
 
     END IF
 
@@ -432,19 +474,18 @@ CONTAINS
     END IF
 
     domain%m_time = domain%m_time+domain%m_deltatime
-
-    domain%m_cycle=domain%m_cycle+1
+    domain%m_cycle = domain%m_cycle+1
 
   END SUBROUTINE TimeIncrement
 
 
 
-  SUBROUTINE InitStressTermsForElems(domain, numElem, sigxx, sigyy, sigzz)
+  SUBROUTINE InitStressTermsForElems(domain, sigxx, sigyy, sigzz, numElem)
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER         :: numElem
-    REAL(KIND=8), DIMENSION(0:) :: sigxx
+    REAL(KIND=8), DIMENSION(0:) :: sigxx  ! Is the dimension correct here?
     REAL(KIND=8), DIMENSION(0:) :: sigyy
     REAL(KIND=8), DIMENSION(0:) :: sigzz
     INTEGER(KIND=4) :: ii
@@ -466,13 +507,13 @@ CONTAINS
                                                el_volume   )
     IMPLICIT NONE 
 
-    REAL(KIND=8), DIMENSION(1:8)  :: x, y, z
-    REAL(KIND=8), DIMENSION(1:8,1:3) :: b
+    REAL(KIND=8), DIMENSION(0:7)  :: x, y, z
+    REAL(KIND=8), DIMENSION(0:7,0:2) :: b
     REAL(KIND=8), INTENT(INOUT) :: el_volume
     INTEGER(KIND=4), PARAMETER :: RLK = 8
-    REAL(KIND=8)  :: x1, x2, x3, x4, x5, x6, x7, x8
-    REAL(KIND=8)  :: y1, y2, y3, y4, y5, y6, y7, y8
-    REAL(KIND=8)  :: z1, z2, z3, z4, z5, z6, z7, z8
+    REAL(KIND=8)  :: x0, x1, x2, x3, x4, x5, x6, x7
+    REAL(KIND=8)  :: y0, y1, y2, y3, y4, y5, y6, y7
+    REAL(KIND=8)  :: z0, z1, z2, z3, z4, z5, z6, z7
 
     REAL(KIND=8)  :: fjxxi, fjxet, fjxze
     REAL(KIND=8)  :: fjyxi, fjyet, fjyze
@@ -481,6 +522,7 @@ CONTAINS
     REAL(KIND=8)  :: cjyxi, cjyet, cjyze
     REAL(KIND=8)  :: cjzxi, cjzet, cjzze
 
+    x0 = x(0)
     x1 = x(1)
     x2 = x(2)
     x3 = x(3)
@@ -488,8 +530,8 @@ CONTAINS
     x5 = x(5)
     x6 = x(6)
     x7 = x(7)
-    x8 = x(8)
 
+    y0 = y(0)
     y1 = y(1)
     y2 = y(2)
     y3 = y(3)
@@ -497,8 +539,8 @@ CONTAINS
     y5 = y(5)
     y6 = y(6)
     y7 = y(7)
-    y8 = y(8)
 
+    z0 = z(0)
     z1 = z(1)
     z2 = z(2)
     z3 = z(3)
@@ -506,19 +548,18 @@ CONTAINS
     z5 = z(5)
     z6 = z(6)
     z7 = z(7)
-    z8 = z(8)
 
-    fjxxi = .125_RLK * ( (x7-x1) + (x6-x4) - (x8-x2) - (x5-x3) )
-    fjxet = .125_RLK * ( (x7-x1) - (x6-x4) + (x8-x2) - (x5-x3) )
-    fjxze = .125_RLK * ( (x7-x1) + (x6-x4) + (x8-x2) + (x5-x3) )
+    fjxxi = .125_RLK * ( (x6-x0) + (x5-x3) - (x7-x1) - (x4-x2) )
+    fjxet = .125_RLK * ( (x6-x0) - (x5-x3) + (x7-x1) - (x4-x2) )
+    fjxze = .125_RLK * ( (x6-x0) + (x5-x3) + (x7-x1) + (x4-x2) )
 
-    fjyxi = .125_RLK * ( (y7-y1) + (y6-y4) - (y8-y2) - (y5-y3) )
-    fjyet = .125_RLK * ( (y7-y1) - (y6-y4) + (y8-y2) - (y5-y3) )
-    fjyze = .125_RLK * ( (y7-y1) + (y6-y4) + (y8-y2) + (y5-y3) )
+    fjyxi = .125_RLK * ( (y6-y0) + (y5-y3) - (y7-y1) - (y4-y2) )
+    fjyet = .125_RLK * ( (y6-y0) - (y5-y3) + (y7-y1) - (y4-y2) )
+    fjyze = .125_RLK * ( (y6-y0) + (y5-y3) + (y7-y1) + (y4-y2) )
 
-    fjzxi = .125_RLK * ( (z7-z1) + (z6-z4) - (z8-z2) - (z5-z3) )
-    fjzet = .125_RLK * ( (z7-z1) - (z6-z4) + (z8-z2) - (z5-z3) )
-    fjzze = .125_RLK * ( (z7-z1) + (z6-z4) + (z8-z2) + (z5-z3) )
+    fjzxi = .125_RLK * ( (z6-z0) + (z5-z3) - (z7-z1) - (z4-z2) )
+    fjzet = .125_RLK * ( (z6-z0) - (z5-z3) + (z7-z1) - (z4-z2) )
+    fjzze = .125_RLK * ( (z6-z0) + (z5-z3) + (z7-z1) + (z4-z2) )
 
     ! Compute cofactors
     cjxxi =    (fjyet * fjzze) - (fjzet * fjyze)
@@ -536,32 +577,32 @@ CONTAINS
     ! calculate partials :
     !     this need only be done for l = 0,1,2,3   since , by symmetry ,
     !     (6,7,4,5) = - (0,1,2,3) .
-    b(1,1) =   -  cjxxi  -  cjxet  -  cjxze
-    b(2,1) =      cjxxi  -  cjxet  -  cjxze
-    b(3,1) =      cjxxi  +  cjxet  -  cjxze
-    b(4,1) =   -  cjxxi  +  cjxet  -  cjxze
+    b(0,0) =   -  cjxxi  -  cjxet  -  cjxze
+    b(1,0) =      cjxxi  -  cjxet  -  cjxze
+    b(2,0) =      cjxxi  +  cjxet  -  cjxze
+    b(3,0) =   -  cjxxi  +  cjxet  -  cjxze
+    b(4,0) = -b(2,0)
+    b(5,0) = -b(3,0)
+    b(6,0) = -b(0,0)
+    b(7,0) = -b(1,0)
+
+    b(0,1) =   -  cjyxi  -  cjyet  -  cjyze
+    b(1,1) =      cjyxi  -  cjyet  -  cjyze
+    b(2,1) =      cjyxi  +  cjyet  -  cjyze
+    b(3,1) =   -  cjyxi  +  cjyet  -  cjyze
+    b(4,1) = -b(2,1)
     b(5,1) = -b(3,1)
-    b(6,1) = -b(4,1)
+    b(6,1) = -b(0,1)
     b(7,1) = -b(1,1)
-    b(8,1) = -b(2,1)
 
-    b(1,2) =   -  cjyxi  -  cjyet  -  cjyze
-    b(2,2) =      cjyxi  -  cjyet  -  cjyze
-    b(3,2) =      cjyxi  +  cjyet  -  cjyze
-    b(4,2) =   -  cjyxi  +  cjyet  -  cjyze
-    b(5,2) = -b(3,2)
-    b(6,2) = -b(4,2)
-    b(7,2) = -b(1,2)
-    b(8,2) = -b(2,2)
-
-    b(1,3) =   -  cjzxi  -  cjzet  -  cjzze
-    b(2,3) =      cjzxi  -  cjzet  -  cjzze
-    b(3,3) =      cjzxi  +  cjzet  -  cjzze
-    b(4,3) =   -  cjzxi  +  cjzet  -  cjzze
-    b(5,3) = -b(3,3)
-    b(6,3) = -b(4,3)  ! Indices adjusted
-    b(7,3) = -b(1,3)  ! Indices adjusted
-    b(8,3) = -b(2,3)  ! Indices adjusted
+    b(0,2) =   -  cjzxi  -  cjzet  -  cjzze
+    b(1,2) =      cjzxi  -  cjzet  -  cjzze
+    b(2,2) =      cjzxi  +  cjzet  -  cjzze
+    b(3,2) =   -  cjzxi  +  cjzet  -  cjzze
+    b(4,2) = -b(2,2)
+    b(5,2) = -b(3,2)  ! Indices adjusted
+    b(6,2) = -b(0,2)  ! Indices adjusted
+    b(7,2) = -b(1,2)  ! Indices adjusted
 
     ! Calculate jacobian determinant (volume)
     el_volume = 8.0_RLK * ( fjxet * cjxet + fjyet * cjyet + fjzet * cjzet)
@@ -570,123 +611,121 @@ CONTAINS
 
 
 
-  SUBROUTINE SumElemFaceNormal(normalX1, normalY1, normalZ1, &
+  SUBROUTINE SumElemFaceNormal(normalX0, normalY0, normalZ0, &
+                               normalX1, normalY1, normalZ1, &
                                normalX2, normalY2, normalZ2, &
                                normalX3, normalY3, normalZ3, &
-                               normalX4, normalY4, normalZ4, &
+                                x0,  y0,  z0,    &
                                 x1,  y1,  z1,    &
                                 x2,  y2,  z2,    &
-                                x3,  y3,  z3,    &
-                                x4,  y4,  z4     )
-
+                                x3,  y3,  z3     )
     IMPLICIT NONE
 
     ! The normals here should be pointer!
-    REAL(KIND=8), POINTER :: normalX1, normalY1, normalZ1
-    REAL(KIND=8), POINTER :: normalX2, normalY2, normalZ2
-    REAL(KIND=8), POINTER :: normalX3, normalY3, normalZ3
-    REAL(KIND=8), POINTER :: normalX4, normalY4, normalZ4
+    REAL(KIND=8) :: normalX0, normalY0, normalZ0
+    REAL(KIND=8) :: normalX1, normalY1, normalZ1
+    REAL(KIND=8) :: normalX2, normalY2, normalZ2
+    REAL(KIND=8) :: normalX3, normalY3, normalZ3
+    REAL(KIND=8) :: x0, y0, z0
     REAL(KIND=8) :: x1, y1, z1
     REAL(KIND=8) :: x2, y2, z2
-    REAL(KIND=8) :: x3, y3, z3  
-    REAL(KIND=8) :: x4, y4, z4
+    REAL(KIND=8) :: x3, y3, z3
   
+    REAL(KIND=8) :: bisectX0
+    REAL(KIND=8) :: bisectY0
+    REAL(KIND=8) :: bisectZ0
     REAL(KIND=8) :: bisectX1
     REAL(KIND=8) :: bisectY1
     REAL(KIND=8) :: bisectZ1
-    REAL(KIND=8) :: bisectX2
-    REAL(KIND=8) :: bisectY2
-    REAL(KIND=8) :: bisectZ2
     REAL(KIND=8) :: areaX
     REAL(KIND=8) :: areaY
     REAL(KIND=8) :: areaZ
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
-    bisectX1 = 0.5_RLK * (x4 + x3 - x2 - x1)
-    bisectY1 = 0.5_RLK * (y4 + y3 - y2 - y1)
-    bisectZ1 = 0.5_RLK * (z4 + z3 - z2 - z1)
-    bisectX2 = 0.5_RLK * (x3 + x2 - x4 - x1)
-    bisectY2 = 0.5_RLK * (y3 + y2 - y4 - y1)
-    bisectZ2 = 0.5_RLK * (z3 + z2 - z4 - z1)
-    areaX = 0.25_RLK * (bisectY1 * bisectZ2 - bisectZ1 * bisectY2)
-    areaY = 0.25_RLK * (bisectZ1 * bisectX2 - bisectX1 * bisectZ2)
-    areaZ = 0.25_RLK * (bisectX1 * bisectY2 - bisectY1 * bisectX2)
+    bisectX0 = 0.5_RLK * (x3 + x2 - x1 - x0)
+    bisectY0 = 0.5_RLK * (y3 + y2 - y1 - y0)
+    bisectZ0 = 0.5_RLK * (z3 + z2 - z1 - z0)
+    bisectX1 = 0.5_RLK * (x2 + x1 - x3 - x0)
+    bisectY1 = 0.5_RLK * (y2 + y1 - y3 - y0)
+    bisectZ1 = 0.5_RLK * (z2 + z1 - z3 - z0)
+    areaX = 0.25_RLK * (bisectY0 * bisectZ1 - bisectZ0 * bisectY1)
+    areaY = 0.25_RLK * (bisectZ0 * bisectX1 - bisectX0 * bisectZ1)
+    areaZ = 0.25_RLK * (bisectX0 * bisectY1 - bisectY0 * bisectX1)
 
+    normalX0 = normalX0 + areaX
     normalX1 = normalX1 + areaX
     normalX2 = normalX2 + areaX
     normalX3 = normalX3 + areaX
-    normalX4 = normalX4 + areaX
 
+    normalY0 = normalY0 + areaY
     normalY1 = normalY1 + areaY
     normalY2 = normalY2 + areaY
     normalY3 = normalY3 + areaY
-    normalY4 = normalY4 + areaY
 
+    normalZ0 = normalZ0 + areaZ
     normalZ1 = normalZ1 + areaZ
     normalZ2 = normalZ2 + areaZ
     normalZ3 = normalZ3 + areaZ
-    normalZ4 = normalZ4 + areaZ
 
   END SUBROUTINE SumElemFaceNormal
 
 
-
   SUBROUTINE CalcElemNodeNormals(pfx,pfy, pfz, x, y, z)
+    IMPLICIT NONE
 
-    IMPLICIT NONE 
-    REAL(KIND=8), DIMENSION(1:8) :: pfx,pfy,pfz
-    REAL(KIND=8), DIMENSION(1:8) :: x, y, z
+    REAL(KIND=8), DIMENSION(0:7) :: pfx,pfy,pfz
+    REAL(KIND=8), DIMENSION(0:7) :: x, y, z
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     INTEGER(KIND=4) :: i
 
-    DO i = 1, 8
+    DO i = 0, 7
       pfx(i) = 0.0_RLK
       pfy(i) = 0.0_RLK
       pfz(i) = 0.0_RLK
     ENDDO
 
-    ! Evaluate face one: nodes 1, 2, 3, 4
-    CALL SumElemFaceNormal(pfx(1), pfy(1), pfz(1),              &
+    ! Evaluate face one: nodes 0, 1, 2, 3
+    CALL SumElemFaceNormal(pfx(0), pfy(0), pfz(0),              &
+                           pfx(1), pfy(1), pfz(1),              &
                            pfx(2), pfy(2), pfz(2),              &
                            pfx(3), pfy(3), pfz(3),              &
+                           x(0), y(0), z(0), x(1), y(1), z(1),  &
+                           x(2), y(2), z(2), x(3), y(3), z(3))
+    ! Evaluate face two: nodes 0, 4, 5, 1
+    CALL SumElemFaceNormal(pfx(0), pfy(0), pfz(0),              &
                            pfx(4), pfy(4), pfz(4),              &
-                           x(1), y(1), z(1), x(2), y(2), z(2),  &
-                           x(3), y(3), z(3), x(4), y(4), z(4))
-    ! Evaluate face two: nodes 1, 5, 6, 2
+                           pfx(5), pfy(5), pfz(5),              &
+                           pfx(1), pfy(1), pfz(1),              &
+                           x(0), y(0), z(0), x(4), y(4), z(4),  &
+                           x(5), y(5), z(5), x(1), y(1), z(1))
+    ! Evaluate face three: nodes 1, 5, 6, 2
     CALL SumElemFaceNormal(pfx(1), pfy(1), pfz(1),              &
                            pfx(5), pfy(5), pfz(5),              &
                            pfx(6), pfy(6), pfz(6),              &
                            pfx(2), pfy(2), pfz(2),              &
                            x(1), y(1), z(1), x(5), y(5), z(5),  &
                            x(6), y(6), z(6), x(2), y(2), z(2))
-    ! Evaluate face three: nodes 2, 6, 7, 3
+    ! Evaluate face four: nodes 2, 6, 7, 3
     CALL SumElemFaceNormal(pfx(2), pfy(2), pfz(2),              &
                            pfx(6), pfy(6), pfz(6),              &
                            pfx(7), pfy(7), pfz(7),              &
                            pfx(3), pfy(3), pfz(3),              &
                            x(2), y(2), z(2), x(6), y(6), z(6),  &
                            x(7), y(7), z(7), x(3), y(3), z(3))
-    ! Evaluate face four: nodes 3, 7, 8, 4
+    ! Evaluate face five: nodes 3, 7, 4, 0
     CALL SumElemFaceNormal(pfx(3), pfy(3), pfz(3),              &
                            pfx(7), pfy(7), pfz(7),              &
-                           pfx(8), pfy(8), pfz(8),              &
                            pfx(4), pfy(4), pfz(4),              &
+                           pfx(0), pfy(0), pfz(0),              &
                            x(3), y(3), z(3), x(7), y(7), z(7),  &
-                           x(8), y(8), z(8), x(4), y(4), z(4))
-    ! Evaluate face five: nodes 4, 8, 5, 1
+                           x(4), y(4), z(4), x(0), y(0), z(0))
+    ! Evaluate face six: nodes 4, 7, 6, 5
     CALL SumElemFaceNormal(pfx(4), pfy(4), pfz(4),              &
-                           pfx(8), pfy(8), pfz(8),              &
-                           pfx(5), pfy(5), pfz(5),              &
-                           pfx(1), pfy(1), pfz(1),              &
-                           x(4), y(4), z(4), x(8), y(8), z(8),  &
-                           x(5), y(5), z(5), x(1), y(1), z(1))
-    ! Evaluate face six: nodes 5, 8, 7, 6
-    CALL SumElemFaceNormal(pfx(5), pfy(5), pfz(5),              &
-                           pfx(8), pfy(8), pfz(8),              &
                            pfx(7), pfy(7), pfz(7),              &
                            pfx(6), pfy(6), pfz(6),              &
-                           x(5), y(5), z(5), x(8), y(8), z(8),  &
-                           x(7), y(7), z(7), x(6), y(6), z(6))
+                           pfx(5), pfy(5), pfz(5),              &
+                           x(4), y(4), z(4), x(7), y(7), z(7),  &
+                           x(6), y(6), z(6), x(5), y(5), z(5))
 
   END SUBROUTINE CalcElemNodeNormals
 
@@ -695,23 +734,23 @@ CONTAINS
   SUBROUTINE SumElemStressesToNodeForces(B, stress_xx, stress_yy, stress_zz,  fx,  fy,  fz)
     IMPLICIT NONE
 
-    REAL(KIND=8) ,DIMENSION(1:8, 1:3) :: B
+    REAL(KIND=8) ,DIMENSION(0:7, 0:2) :: B
     REAL(KIND=8) :: stress_xx, stress_yy, stress_zz
-    REAL(KIND=8), DIMENSION(1:8) ::  fx,  fy,  fz
+    REAL(KIND=8), DIMENSION(0:7) ::  fx,  fy,  fz
     INTEGER(KIND=4) :: i
 
-    DO i=1, 8
-      fx(i) = - ( stress_xx * B(i, 1) )
-      fy(i) = - ( stress_yy * B(i, 2) )
-      fz(i) = - ( stress_zz * B(i, 3) )
+    DO i=0, 7
+      fx(i) = - ( stress_xx * B(i, 0) )
+      fy(i) = - ( stress_yy * B(i, 1) )
+      fz(i) = - ( stress_zz * B(i, 2) )
     END DO
 
   END SUBROUTINE SumElemStressesToNodeForces
 
 
 
-  SUBROUTINE IntegrateStressForElems(domain, numElem, sigxx, sigyy, sigzz, determ)
-    USE OMP_LIB
+  SUBROUTINE IntegrateStressForElems(domain, sigxx, sigyy, sigzz, determ, numElem)
+    !USE OMP_LIB
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -723,15 +762,15 @@ CONTAINS
     REAL(KIND=8) :: fx_local, fy_local, fz_local, fx_tmp, fy_tmp, fz_tmp
     REAL(KIND=8) :: x_local, y_local, z_local
     REAL(KIND=8), DIMENSION(:),ALLOCATABLE :: fx_elem, fy_elem, fz_elem
-    REAL(KIND=8), DIMENSION(1:8,1:3) :: B   ! shape function derivatives
-    REAL(KIND=8), DIMENSION(1:8)   :: x_local
-    REAL(KIND=8), DIMENSION(1:8)   :: y_local
-    REAL(KIND=8), DIMENSION(1:8)   :: z_local
+    REAL(KIND=8), DIMENSION(0:7,0:2) :: B   ! shape function derivatives
+    REAL(KIND=8), DIMENSION(0:7)   :: x_local
+    REAL(KIND=8), DIMENSION(0:7)   :: y_local
+    REAL(KIND=8), DIMENSION(0:7)   :: z_local
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemNodes => NULL()
     INTEGER      :: lnode, gnode, count, ielem, kk
     INTEGER      :: numNode = domain%m_numNode
-    INTEGER, DIMENSION(1:numNode) :: cornerList
-    INTEGER      :: numElem8
+    INTEGER, DIMENSION(0:numNode-1) :: cornerList
+    INTEGER      :: numElem8 = numElem * 8
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4) :: numthreads
 
@@ -741,18 +780,16 @@ CONTAINS
       numthreads = 1
 #endif
 
-    numElem8 = numElem * 8
     IF (numthreads  > 1) THEN
       ! Is this right? - Unsure about the allocation
-      ALLOCATE(fx_elem(1:numElem8))
-      ALLOCATE(fy_elem(1:numElem8))
-      ALLOCATE(fz_elem(1:numElem8))
+      ALLOCATE(fx_elem(0:numElem8-1))
+      ALLOCATE(fy_elem(0:numElem8-1))
+      ALLOCATE(fz_elem(0:numElem8-1))
     ENDIF
     
-
     !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
     DO kk=0, numElem-1
-      elemToNode => domain%m_nodelist(kk*8:)  ! Why the kk*8 here?
+      elemToNode => domain%m_nodelist(kk, :)  ! Adjusted index here
 
       ! Get nodal coordinates from global arrays and copy into local arrays.
       Call CollectDomainNodesToElemNodes(domain, elemToNode, x_local, y_local, z_local)
@@ -761,19 +798,21 @@ CONTAINS
       CALL CalcElemShapeFunctionDerivatives(x_local, y_local, z_local, &
                                             B, determ(kk))
 
-      CALL CalcElemNodeNormals(B(:,1) , B(:,2), B(:,3), x_local, y_local, z_local)
+      CALL CalcElemNodeNormals(B(:,0) , B(:,1), B(:,2), x_local, y_local, z_local)
 
       IF ( numthreads > 1) THEN
         ! Eliminate thread writing conflicts at the nodes by giving
         ! each element its own copy of the data.
-        CALL SumElemStressesToNodeForces(B, sigxx(kk), sigyy(kk), sigzz(kk), &
-                                         fx_elem, fy_elem, fz_elem)
+        CALL SumElemStressesToNodeForces(B, sigxx(kk), sigyy(kk), &
+                                         sigzz(kk), fx_elem,      &
+                                         fy_elem, fz_elem)
       ELSE
-        CALL SumElemStressesToNodeForces(B, sigxx(kk), sigyy(kk), sigzz(kk), &
-                                         fx_local, fy_local, fz_local)
+        CALL SumElemStressesToNodeForces(B, sigxx(kk), sigyy(kk), &
+                                         sigzz(kk), fx_local,     &
+                                         fy_local, fz_local)
 
         ! Copy nodal force contributions to global force array
-        DO lnode=1, 8
+        DO lnode=0, 7
           gnode = elemToNode(lnode)
           domain%m_fx(gnode) = domain%m_fx(gnode) + fx_local(lnode)
           domain%m_fy(gnode) = domain%m_fy(gnode) + fy_local(lnode)
@@ -784,13 +823,13 @@ CONTAINS
     !  !$OMP END PARALLEL DO 
 
     IF (numthreads > 1) THEN
-      DO gnode=1, numNode
+      DO gnode=0, numNode-1
         count = domain%m_nodeElemCount(gnode)
-        cornerList = domain%m_nodeElemCornerList(gnode)  ! TODO (Ludger): The initialization of cornerList needs to be checked!!!
+        cornerList = domain%m_nodeElemCornerList(gnode, :)  ! TODO (Ludger): The initialization of cornerList needs to be checked!!!
         fx_tmp = 0.0_RLK
         fy_tmp = 0.0_RLK
         fz_tmp = 0.0_RLK
-        DO i=1, count
+        DO i=0, count
           ielem = cornerList(i)
           fx_tmp = fx_tmp + fx_elem(ielem)
           fy_tmp = fy_tmp + fy_elem(ielem)
@@ -814,81 +853,80 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER, DIMENSION(:), POINTER :: elemToNode
-    REAL(KIND=8),DIMENSION(1:8), INTENT(INOUT)    :: elemX, elemY, elemZ
+    REAL(KIND=8),DIMENSION(0:7), INTENT(INOUT)    :: elemX, elemY, elemZ
 
     INTEGER(KIND=4) :: nd0i, nd1i, nd2i, nd3i
     INTEGER(KIND=4) :: nd4i, nd5i, nd6i, nd7i
 
-    nd0i = elemToNode(1)
-    nd1i = elemToNode(2)
-    nd2i = elemToNode(3)
-    nd3i = elemToNode(4)
-    nd4i = elemToNode(5)
-    nd5i = elemToNode(6)
-    nd6i = elemToNode(7)
-    nd7i = elemToNode(8)
+    nd0i = elemToNode(0)
+    nd1i = elemToNode(1)
+    nd2i = elemToNode(2)
+    nd3i = elemToNode(3)
+    nd4i = elemToNode(4)
+    nd5i = elemToNode(5)
+    nd6i = elemToNode(6)
+    nd7i = elemToNode(7)
 
-    elemX(1) = domain%m_x(nd0i)
-    elemX(2) = domain%m_x(nd1i)
-    elemX(3) = domain%m_x(nd2i)
-    elemX(4) = domain%m_x(nd3i)
-    elemX(5) = domain%m_x(nd4i)
-    elemX(6) = domain%m_x(nd5i)
-    elemX(7) = domain%m_x(nd6i)
-    elemX(8) = domain%m_x(nd7i)
+    elemX(0) = domain%m_x(nd0i)
+    elemX(1) = domain%m_x(nd1i)
+    elemX(2) = domain%m_x(nd2i)
+    elemX(3) = domain%m_x(nd3i)
+    elemX(4) = domain%m_x(nd4i)
+    elemX(5) = domain%m_x(nd5i)
+    elemX(6) = domain%m_x(nd6i)
+    elemX(7) = domain%m_x(nd7i)
 
-    elemY(1) = domain%m_y(nd0i)
-    elemY(2) = domain%m_y(nd1i)
-    elemY(3) = domain%m_y(nd2i)
-    elemY(4) = domain%m_y(nd3i)
-    elemY(5) = domain%m_y(nd4i)
-    elemY(6) = domain%m_y(nd5i)
-    elemY(7) = domain%m_y(nd6i)
-    elemY(8) = domain%m_y(nd7i)
+    elemY(0) = domain%m_y(nd0i)
+    elemY(1) = domain%m_y(nd1i)
+    elemY(2) = domain%m_y(nd2i)
+    elemY(3) = domain%m_y(nd3i)
+    elemY(4) = domain%m_y(nd4i)
+    elemY(5) = domain%m_y(nd5i)
+    elemY(6) = domain%m_y(nd6i)
+    elemY(7) = domain%m_y(nd7i)
 
-    elemZ(1) = domain%m_z(nd0i)
-    elemZ(2) = domain%m_z(nd1i)
-    elemZ(3) = domain%m_z(nd2i)
-    elemZ(4) = domain%m_z(nd3i)
-    elemZ(5) = domain%m_z(nd4i)
-    elemZ(6) = domain%m_z(nd5i)
-    elemZ(7) = domain%m_z(nd6i)
-    elemZ(8) = domain%m_z(nd7i)
+    elemZ(0) = domain%m_z(nd0i)
+    elemZ(1) = domain%m_z(nd1i)
+    elemZ(2) = domain%m_z(nd2i)
+    elemZ(3) = domain%m_z(nd3i)
+    elemZ(4) = domain%m_z(nd4i)
+    elemZ(5) = domain%m_z(nd5i)
+    elemZ(6) = domain%m_z(nd6i)
+    elemZ(7) = domain%m_z(nd7i)
 
   END SUBROUTINE CollectDomainNodesToElemNodes
 
 
 
-  SUBROUTINE VoluDer(x1, x2, x3,      &
-                     x4, x5, x6,      &
-                     y1, y2, y3,      &
-                     y4, y5, y6,      &
-                     z1, z2, z3,      &
-                     z4, z5, z6,      &
+  SUBROUTINE VoluDer(x0, x1, x2,      &
+                     x3, x4, x5,      &
+                     y0, y1, y2,      &
+                     y3, y4, y5,      &
+                     z0, z1, z2,      &
+                     z3, z4, z5,      &
                      dvdx, dvdy, dvdz )
     IMPLICIT NONE
-    REAL(KIND=8) :: x1, x2, x3, x4, x5, x6
-    REAL(KIND=8) :: y1, y2, y3, y4, y5, y6
-    REAL(KIND=8) :: z1, z2, z3, z4, z5, z6
+
+    REAL(KIND=8) :: x0, x1, x2, x3, x4, x5
+    REAL(KIND=8) :: y0, y1, y2, y3, y4, y5
+    REAL(KIND=8) :: z0, z1, z2, z3, z4, z5
     REAL(KIND=8) :: dvdx, dvdy, dvdz
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     REAL(KIND=8), PARAMETER :: twelfth = 1.0_RLK / 12.0_RLK
 
     dvdx =                                              &
-      (y2 + y3) * (z1 + z2) - (y1 + y2) * (z2 + z3) +   &
-      (y1 + y5) * (z4 + z5) - (y4 + y5) * (z1 + z5) -   &
-      (y3 + y6) * (z4 + z6) + (y4 + y6) * (z3 + z6)
-
+      (y1 + y2) * (z0 + z1) - (y0 + y1) * (z1 + z2) +   &
+      (y0 + y4) * (z3 + z4) - (y3 + y4) * (z0 + z4) -   &
+      (y2 + y5) * (z3 + z5) + (y3 + y5) * (z2 + z5)
     dvdy =                                              &
-      - (x2 + x3) * (z1 + z2) + (x1 + x2) * (z2 + z3) - &
-      (x1 + x5) * (z4 + z6) + (x4 + x5) * (z1 + z5) +   &
-      (x3 + x6) * (z4 + z6) - (x4 + x6) * (z3 + z6)
-
+      - (x1 + x2) * (z0 + z1) + (x0 + x1) * (z1 + z2) - &
+      (x0 + x4) * (z3 + z4) + (x3 + x4) * (z0 + z4) +   &
+      (x2 + x5) * (z3 + z5) - (x3 + x5) * (z2 + z5)
     dvdz =                                              &
-      - (y2 + y3) * (x1 + x2) + (y1 + y2) * (x2 + x3) - &
-      (y1 + y5) * (x4 + x5) + (y4 + y5) * (x1 + x5) +   &
-      (y3 + y6) * (x4 + x6) - (y4 + y6) * (x3 + x6)
+      - (y1 + y2) * (x0 + x1) + (y0 + y1) * (x1 + x2) - &
+      (y0 + y4) * (x3 + x4) + (y3 + y4) * (x0 + x4) +   &
+      (y2 + y5) * (x3 + x5) - (y3 + y5) * (x2 + x5)
 
     dvdx = dvdx * twelfth
     dvdy = dvdy * twelfth
@@ -901,98 +939,98 @@ CONTAINS
   SUBROUTINE CalcElemVolumeDerivative(dvdx, dvdy, dvdz, x, y, z)
     IMPLICIT NONE
 
-    REAL(KIND=8),DIMENSION(1:8) :: dvdx, dvdy, dvdz
-    REAL(KIND=8),DIMENSION(1:8) :: x, y, z
+    REAL(KIND=8),DIMENSION(0:7) :: dvdx, dvdy, dvdz
+    REAL(KIND=8),DIMENSION(0:7) :: x, y, z
 
-    CALL VoluDer(x(2), x(3), x(4), x(5), x(6), x(8),  &
-                 y(2), y(3), y(4), y(5), y(6), y(8),  &
-                 z(2), z(3), z(4), z(5), z(6), z(8),  &
-                 dvdx(1), dvdy(1), dvdz(1))
-    CALL VoluDer(x(1), x(2), x(3), x(8), x(5), x(7),  &
-                 y(1), y(2), y(3), y(8), y(5), y(7),  &
-                 z(1), z(2), z(3), z(8), z(5), z(7),  &
-                 dvdx(4), dvdy(4), dvdz(4))
-    CALL VoluDer(x(4), x(1), x(2), x(7), x(8), x(6),  &
-                 y(4), y(1), y(2), y(7), y(8), y(6),  &
-                 z(4), z(1), z(2), z(7), z(8), z(6),  &
+    CALL VoluDer(x(1), x(2), x(3), x(4), x(5), x(7),  &
+                 y(1), y(2), y(3), y(4), y(5), y(7),  &
+                 z(1), z(2), z(3), z(4), z(5), z(7),  &
+                 dvdx(0), dvdy(0), dvdz(0))
+    CALL VoluDer(x(0), x(1), x(2), x(7), x(4), x(6),  &
+                 y(0), y(1), y(2), y(7), y(4), y(6),  &
+                 z(0), z(1), z(2), z(7), z(4), z(6),  &
                  dvdx(3), dvdy(3), dvdz(3))
-    CALL VoluDer(x(3), x(4), x(1), x(6), x(7), x(5),  &
-                 y(3), y(4), y(1), y(6), y(7), y(5),  &
-                 z(3), z(4), z(1), z(6), z(7), z(5),  &
+    CALL VoluDer(x(3), x(0), x(1), x(6), x(7), x(5),  &
+                 y(3), y(0), y(1), y(6), y(7), y(5),  &
+                 z(3), z(0), z(1), z(6), z(7), z(5),  &
                  dvdx(2), dvdy(2), dvdz(2))
-    CALL VoluDer(x(8), x(7), x(6), x(1), x(4), x(2),  &
-                 y(8), y(7), y(6), y(1), y(4), y(2),  &
-                 z(8), z(7), z(6), z(1), z(4), z(2),  &
+    CALL VoluDer(x(2), x(3), x(0), x(5), x(6), x(4),  &
+                 y(2), y(3), y(0), y(5), y(6), y(4),  &
+                 z(2), z(3), z(0), z(5), z(6), z(4),  &
+                 dvdx(1), dvdy(1), dvdz(1))
+    CALL VoluDer(x(7), x(6), x(5), x(0), x(3), x(1),  &
+                 y(7), y(6), y(5), y(0), y(3), y(1),  &
+                 z(7), z(6), z(5), z(0), z(3), z(1),  &
+                 dvdx(4), dvdy(4), dvdz(4))
+    CALL VoluDer(x(4), x(7), x(6), x(1), x(0), x(2),  &
+                 y(4), y(7), y(6), y(1), y(0), y(2),  &
+                 z(4), z(7), z(6), z(1), z(0), z(2),  &
                  dvdx(5), dvdy(5), dvdz(5))
-    CALL VoluDer(x(5), x(8), x(7), x(2), x(1), x(3),  &
-                 y(5), y(8), y(7), y(2), y(1), y(3),  &
-                 z(5), z(8), z(7), z(2), z(1), z(3),  &
+    CALL VoluDer(x(5), x(4), x(7), x(2), x(1), x(3),  &
+                 y(5), y(4), y(7), y(2), y(1), y(3),  &
+                 z(5), z(4), z(7), z(2), z(1), z(3),  &
                  dvdx(6), dvdy(6), dvdz(6))
-    CALL VoluDer(x(6), x(5), x(8), x(3), x(2), x(4),  &
-                 y(6), y(5), y(8), y(3), y(2), y(4),  &
-                 z(6), z(5), z(8), z(3), z(2), z(4),  &
+    CALL VoluDer(x(6), x(5), x(4), x(3), x(2), x(0),  &
+                 y(6), y(5), y(4), y(3), y(2), y(0),  &
+                 z(6), z(5), z(4), z(3), z(2), z(0),  &
                  dvdx(7), dvdy(7), dvdz(7))
-    CALL VoluDer(x(7), x(6), x(5), x(4), x(3), x(1),  &
-                 y(7), y(6), y(5), y(4), y(3), y(1),  &
-                 z(7), z(6), z(5), z(4), z(3), z(1),  &
-                 dvdx(8), dvdy(8), dvdz(8))
 
   END SUBROUTINE CalcElemVolumeDerivative
 
 
 
-  SUBROUTINE CalcElemFBHourglassForce(xd, yd, zd, &
-                                      hourgam, &
+  SUBROUTINE CalcElemFBHourglassForce(xd, yd, zd,         &
+                                      hourgam,            &
                                       coefficient, hgfx,  &
                                       hgfy, hgfz          )
     IMPLICIT NONE
-    REAL(KIND=8), DIMENSION(1:8) :: xd,yd,zd
-    REAL(KIND=8), DIMENSION(1:4,1:8) :: hourgam
+    REAL(KIND=8), DIMENSION(0:7) :: xd,yd,zd
+    REAL(KIND=8), DIMENSION(0:3,0:7) :: hourgam
     REAL(KIND=8) :: coefficient
-    REAL(KIND=8), DIMENSION(1:8) :: hgfx,hgfy,hgfz
-    REAL(KIND=8), DIMENSION(1:4) :: hxx
+    REAL(KIND=8), DIMENSION(0:7) :: hgfx,hgfy,hgfz
+    REAL(KIND=8), DIMENSION(0:3) :: hxx
     INTEGER(KIND=4) :: i
 
-    DO i=1, 4
-      hxx(i) = hourgam(i, 1) * xd(1) + hourgam(i, 2) * xd(2) + &
-               hourgam(i, 3) * xd(3) + hourgam(i, 4) * xd(4) + &
-               hourgam(i, 5) * xd(5) + hourgam(i, 6) * xd(6) + &
-               hourgam(i, 7) * xd(7) + hourgam(i, 8) * xd(8)
+    DO i=0, 3
+      hxx(i) = hourgam(i, 0) * xd(0) + hourgam(i, 1) * xd(1) + &
+               hourgam(i, 2) * xd(2) + hourgam(i, 3) * xd(3) + &
+               hourgam(i, 4) * xd(4) + hourgam(i, 5) * xd(5) + &
+               hourgam(i, 6) * xd(6) + hourgam(i, 7) * xd(7)
     END DO
 
-    DO i=1, 8
-      hgfx(i) = coefficient * (hxx(1) * hourgam(1, i) + &
+    DO i=0, 7
+      hgfx(i) = coefficient * (hxx(0) * hourgam(0, i) + &
+                               hxx(1) * hourgam(1, i) + &
                                hxx(2) * hourgam(2, i) + &
-                               hxx(3) * hourgam(3, i) + &
-                               hxx(4) * hourgam(4, i))
+                               hxx(3) * hourgam(3, i))
     END DO
 
-    DO i=1, 4
-      hxx(i) = hourgam(i, 1) * yd(1) + hourgam(i, 2) * yd(2) + &
-               hourgam(i, 3) * yd(3) + hourgam(i, 4) * yd(4) + &
-               hourgam(i, 5) * yd(5) + hourgam(i, 6) * yd(6) + &
-               hourgam(i, 7) * yd(7) + hourgam(i, 8) * yd(8)
+    DO i=0, 3
+      hxx(i) = hourgam(i, 0) * yd(0) + hourgam(i, 1) * yd(1) + &
+               hourgam(i, 2) * yd(2) + hourgam(i, 3) * yd(3) + &
+               hourgam(i, 4) * yd(4) + hourgam(i, 5) * yd(5) + &
+               hourgam(i, 6) * yd(6) + hourgam(i, 7) * yd(7)
     END DO
 
-    DO i=1, 8
-      hgfy(i) = coefficient * (hxx(1) * hourgam(1, i) + &
+    DO i=0, 7
+      hgfy(i) = coefficient * (hxx(0) * hourgam(0, i) + &
+                               hxx(1) * hourgam(1, i) + &
                                hxx(2) * hourgam(2, i) + &
-                               hxx(3) * hourgam(3, i) + &
-                               hxx(4) * hourgam(4, i))
+                               hxx(3) * hourgam(3, i))
     END DO
 
-    DO i=1, 4
-      hxx(i) = hourgam(i, 1) * zd(1) + hourgam(i, 2) * zd(2) + &
-               hourgam(i, 3) * zd(3) + hourgam(i, 4) * zd(4) + &
-               hourgam(i, 5) * zd(5) + hourgam(i, 6) * zd(6) + &
-               hourgam(i, 7) * zd(7) + hourgam(i, 8) * zd(8)
+    DO i=0, 3
+      hxx(i) = hourgam(i, 0) * zd(0) + hourgam(i, 1) * zd(1) + &
+               hourgam(i, 2) * zd(2) + hourgam(i, 3) * zd(3) + &
+               hourgam(i, 4) * zd(4) + hourgam(i, 5) * zd(5) + &
+               hourgam(i, 6) * zd(6) + hourgam(i, 7) * zd(7)
     END DO
 
-    DO i=1, 8
-      hgfz(i) = coefficient * (hxx(1) * hourgam(1, i) + &
+    DO i=0, 7
+      hgfz(i) = coefficient * (hxx(0) * hourgam(0, i) + &
+                               hxx(1) * hourgam(1, i) + &
                                hxx(2) * hourgam(2, i) + &
-                               hxx(3) * hourgam(3, i) + &
-                               hxx(4) * hourgam(4, i))
+                               hxx(3) * hourgam(3, i))
     END DO
 
   END SUBROUTINE CalcElemFBHourglassForce
@@ -1023,16 +1061,16 @@ CONTAINS
     REAL(KIND=8) :: coefficient, volinv, ss1, mass1, volume13
     REAL(KIND=8) :: hourmodx, hourmody, hourmodz
     REAL(KIND=8) :: fx_tmp, fy_tmp, fz_tmp = 0.0_RLK
-    REAL(KIND=8), DIMENSION(1:8) :: hgfx, hgfy, hgfz
-    REAL(KIND=8), DIMENSION(1:8) :: xd1, yd1, zd1
-    REAL(KIND=8), DIMENSION(1:4, 1:8) :: hourgam
-    REAL(KIND=8), DIMENSION(1:8, 1:4) :: gamma
+    REAL(KIND=8), DIMENSION(0:7) :: hgfx, hgfy, hgfz
+    REAL(KIND=8), DIMENSION(0:7) :: xd1, yd1, zd1
+    REAL(KIND=8), DIMENSION(0:3, 0:7) :: hourgam
+    REAL(KIND=8), DIMENSION(0:7, 0:3) :: gamma
     REAL(KIND=8), DIMENSION(:), POINTER :: fx_elem, fy_elem, fz_elem
     REAL(KIND=8), DIMENSION(:), POINTER :: fx_local, fy_local, fz_local
     INTEGER(KIND=4) :: numElem, numElem8, i, i2, i3, i1
     INTEGER(KIND=4) :: numNode = domain%m_numNode
     INTEGER(KIND=4) :: gnode, elem, count, start
-    INTEGER(KIND=4) :: n1si2, n2si2, n3si2, n4si2, n5si2, n6si2, n7si2, n8si2
+    INTEGER(KIND=4) :: n0si2, n1si2, n2si2, n3si2, n4si2, n5si2, n6si2, n7si2
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode => NULL()
     INTEGER :: numthreads
 
@@ -1049,99 +1087,99 @@ CONTAINS
     
 
     IF (numthreads > 1) THEN
-      ALLOCATE(fx_elem(1:numElem8))
-      ALLOCATE(fy_elem(1:numElem8))
-      ALLOCATE(fz_elem(1:numElem8))
+      ALLOCATE(fx_elem(0:numElem8-1))
+      ALLOCATE(fy_elem(0:numElem8-1))
+      ALLOCATE(fz_elem(0:numElem8-1))
     ENDIF
 
-    gamma(1,1) =  1.0_RLK
-    gamma(2,1) =  1.0_RLK
-    gamma(3,1) = -1.0_RLK
+    gamma(0,0) =  1.0_RLK
+    gamma(1,0) =  1.0_RLK
+    gamma(2,0) = -1.0_RLK
+    gamma(3,0) = -1.0_RLK
+    gamma(4,0) = -1.0_RLK
+    gamma(5,0) = -1.0_RLK
+    gamma(6,0) =  1.0_RLK
+    gamma(7,0) =  1.0_RLK
+    gamma(0,1) =  1.0_RLK
+    gamma(1,1) = -1.0_RLK
+    gamma(2,1) = -1.0_RLK
+    gamma(3,1) =  1.0_RLK
     gamma(4,1) = -1.0_RLK
-    gamma(5,1) = -1.0_RLK
-    gamma(6,1) = -1.0_RLK
-    gamma(7,1) =  1.0_RLK
-    gamma(8,1) =  1.0_RLK
-    gamma(1,2) =  1.0_RLK
-    gamma(2,2) = -1.0_RLK
+    gamma(5,1) =  1.0_RLK
+    gamma(6,1) =  1.0_RLK
+    gamma(7,1) = -1.0_RLK
+    gamma(0,2) =  1.0_RLK
+    gamma(1,2) = -1.0_RLK
+    gamma(2,2) =  1.0_RLK
     gamma(3,2) = -1.0_RLK
     gamma(4,2) =  1.0_RLK
     gamma(5,2) = -1.0_RLK
     gamma(6,2) =  1.0_RLK
-    gamma(7,2) =  1.0_RLK
-    gamma(8,2) = -1.0_RLK
+    gamma(7,2) = -1.0_RLK
+    gamma(0,3) = -1.0_RLK
     gamma(1,3) =  1.0_RLK
     gamma(2,3) = -1.0_RLK
     gamma(3,3) =  1.0_RLK
-    gamma(4,3) = -1.0_RLK
-    gamma(5,3) =  1.0_RLK
-    gamma(6,3) = -1.0_RLK
-    gamma(7,3) =  1.0_RLK
-    gamma(8,3) = -1.0_RLK
-    gamma(1,4) = -1.0_RLK
-    gamma(2,4) =  1.0_RLK
-    gamma(3,4) = -1.0_RLK
-    gamma(4,4) =  1.0_RLK
-    gamma(5,4) =  1.0_RLK
-    gamma(6,4) = -1.0_RLK
-    gamma(7,4) =  1.0_RLK
-    gamma(8,4) = -1.0_RLK
+    gamma(4,3) =  1.0_RLK
+    gamma(5,3) = -1.0_RLK
+    gamma(6,3) =  1.0_RLK
+    gamma(7,3) = -1.0_RLK
 
   ! *************************************************
   ! compute the hourglass modes
 
     !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem, hourg)
-    DO i2=1, numElem
+    DO i2=0, numElem-1
 
-      elemToNode => domain%m_nodelist(i2)  !- 1-based indexing watch out!
+      elemToNode => domain%m_nodelist(i2, :)
 
       i3=8*i2
       volinv= (1.0_RLK)/determ(i2)
 
-      DO i1=1, 4
+      DO i1=0, 3
 
         hourmodx =                                             &
-          x8n(i3)   * gamma(1,i1) + x8n(i3+1) * gamma(2,i1) +  &
-          x8n(i3+2) * gamma(3,i1) + x8n(i3+3) * gamma(4,i1) +  &
-          x8n(i3+4) * gamma(5,i1) + x8n(i3+5) * gamma(6,i1) +  &
-          x8n(i3+6) * gamma(7,i1) + x8n(i3+7) * gamma(8,i1)
+          x8n(i3)   * gamma(0,i1) + x8n(i3+1) * gamma(1,i1) +  &
+          x8n(i3+2) * gamma(2,i1) + x8n(i3+3) * gamma(3,i1) +  &
+          x8n(i3+4) * gamma(4,i1) + x8n(i3+5) * gamma(5,i1) +  &
+          x8n(i3+6) * gamma(6,i1) + x8n(i3+7) * gamma(7,i1)
 
         hourmody =                                             &
-          y8n(i3)   * gamma(1,i1) + y8n(i3+1) * gamma(2,i1) +  &
-          y8n(i3+2) * gamma(3,i1) + y8n(i3+3) * gamma(4,i1) +  &
-          y8n(i3+4) * gamma(5,i1) + y8n(i3+5) * gamma(6,i1) +  &
-          y8n(i3+6) * gamma(7,i1) + y8n(i3+7) * gamma(8,i1)
+          y8n(i3)   * gamma(0,i1) + y8n(i3+1) * gamma(1,i1) +  &
+          y8n(i3+2) * gamma(2,i1) + y8n(i3+3) * gamma(3,i1) +  &
+          y8n(i3+4) * gamma(4,i1) + y8n(i3+5) * gamma(5,i1) +  &
+          y8n(i3+6) * gamma(6,i1) + y8n(i3+7) * gamma(7,i1)
 
         hourmodz =                                             &
-          z8n(i3)   * gamma(1,i1) + z8n(i3+1) * gamma(2,i1) +  &
-          z8n(i3+2) * gamma(3,i1) + z8n(i3+3) * gamma(4,i1) +  &
-          z8n(i3+4) * gamma(5,i1) + z8n(i3+5) * gamma(6,i1) +  &
-          z8n(i3+6) * gamma(7,i1) + z8n(i3+7) * gamma(8,i1)
+          z8n(i3)   * gamma(0,i1) + z8n(i3+1) * gamma(1,i1) +  &
+          z8n(i3+2) * gamma(2,i1) + z8n(i3+3) * gamma(3,i1) +  &
+          z8n(i3+4) * gamma(4,i1) + z8n(i3+5) * gamma(5,i1) +  &
+          z8n(i3+6) * gamma(6,i1) + z8n(i3+7) * gamma(7,i1)
 
-        hourgam(i1, 1) = gamma(1,i1) -  volinv*(dvdx(i3) * hourmodx +  &
-                      dvdy(i3  ) * hourmody + dvdz(i3) * hourmodz )
-
-        hourgam(i1, 2) = gamma(2,i1) -  volinv*(dvdx(i3+1) * hourmodx +  &
-                      dvdy(i3+1) * hourmody + dvdz(i3+1) * hourmodz )
-
-        hourgam(i1, 3) = gamma(3,i1) -  volinv*(dvdx(i3+2) * hourmodx +  &
-                      dvdy(i3+2) * hourmody + dvdz(i3+2) * hourmodz )
-
-        hourgam(i1, 4) = gamma(4,i1) -  volinv*(dvdx(i3+3) * hourmodx +  &
-                      dvdy(i3+3) * hourmody + dvdz(i3+3) * hourmodz )
-
-        hourgam(i1, 5) = gamma(5,i1) -  volinv*(dvdx(i3+4) * hourmodx +  &
-                      dvdy(i3+4) * hourmody + dvdz(i3+4) * hourmodz )
-
-        hourgam(i1, 6) = gamma(6,i1) -  volinv*(dvdx(i3+5) * hourmodx +  &
-                      dvdy(i3+5) * hourmody + dvdz(i3+5) * hourmodz )
-
-        hourgam(i1, 7) = gamma(7,i1) -  volinv*(dvdx(i3+6) * hourmodx +  &
-                      dvdy(i3+6) * hourmody + dvdz(i3+6) * hourmodz )
-
-        hourgam(i1, 8) = gamma(8,i1) -  volinv*(dvdx(i3+7) * hourmodx +  &
-                      dvdy(i3+7) * hourmody + dvdz(i3+7) * hourmodz )
-
+        hourgam(i1, 0) = gamma(0,i1) -  volinv*(dvdx(i3) * hourmodx +  &
+                                                dvdy(i3) * hourmody +  &
+                                                dvdz(i3) * hourmodz )
+        hourgam(i1, 1) = gamma(1,i1) -  volinv*(dvdx(i3+1) * hourmodx +  &
+                                                dvdy(i3+1) * hourmody +  &
+                                                dvdz(i3+1) * hourmodz )
+        hourgam(i1, 2) = gamma(2,i1) -  volinv*(dvdx(i3+2) * hourmodx +  &
+                                                dvdy(i3+2) * hourmody +  &
+                                                dvdz(i3+2) * hourmodz )
+        hourgam(i1, 3) = gamma(3,i1) -  volinv*(dvdx(i3+3) * hourmodx +  &
+                                                dvdy(i3+3) * hourmody +  &
+                                                dvdz(i3+3) * hourmodz )
+        hourgam(i1, 4) = gamma(4,i1) -  volinv*(dvdx(i3+4) * hourmodx +  &
+                                                dvdy(i3+4) * hourmody +  &
+                                                dvdz(i3+4) * hourmodz )
+        hourgam(i1, 5) = gamma(5,i1) -  volinv*(dvdx(i3+5) * hourmodx +  &
+                                                dvdy(i3+5) * hourmody +  &
+                                                dvdz(i3+5) * hourmodz )
+        hourgam(i1, 6) = gamma(6,i1) -  volinv*(dvdx(i3+6) * hourmodx +  &
+                                                dvdy(i3+6) * hourmody +  &
+                                                dvdz(i3+6) * hourmodz )
+        hourgam(i1, 7) = gamma(7,i1) -  volinv*(dvdx(i3+7) * hourmodx +  &
+                                                dvdy(i3+7) * hourmody +  &
+                                                dvdz(i3+7) * hourmodz )
       ENDDO
 
       !   compute forces
@@ -1151,6 +1189,7 @@ CONTAINS
       mass1 = domain%m_elemMass(i2)
       volume13 = CBRT(determ(i2))
 
+      n0si2 = elemToNode(0)
       n1si2 = elemToNode(1)
       n2si2 = elemToNode(2)
       n3si2 = elemToNode(3)
@@ -1158,8 +1197,8 @@ CONTAINS
       n5si2 = elemToNode(5)
       n6si2 = elemToNode(6)
       n7si2 = elemToNode(7)
-      n8si2 = elemToNode(8)
 
+      xd1(0) = domain%m_xd(n0si2)
       xd1(1) = domain%m_xd(n1si2)
       xd1(2) = domain%m_xd(n2si2)
       xd1(3) = domain%m_xd(n3si2)
@@ -1167,8 +1206,8 @@ CONTAINS
       xd1(5) = domain%m_xd(n5si2)
       xd1(6) = domain%m_xd(n6si2)
       xd1(7) = domain%m_xd(n7si2)
-      xd1(8) = domain%m_xd(n8si2)
 
+      yd1(0) = domain%m_yd(n0si2)
       yd1(1) = domain%m_yd(n1si2)
       yd1(2) = domain%m_yd(n2si2)
       yd1(3) = domain%m_yd(n3si2)
@@ -1176,8 +1215,8 @@ CONTAINS
       yd1(5) = domain%m_yd(n5si2)
       yd1(6) = domain%m_yd(n6si2)
       yd1(7) = domain%m_yd(n7si2)
-      yd1(8) = domain%m_yd(n8si2)
 
+      zd1(0) = domain%m_zd(n0si2)
       zd1(1) = domain%m_zd(n1si2)
       zd1(2) = domain%m_zd(n2si2)
       zd1(3) = domain%m_zd(n3si2)
@@ -1185,16 +1224,16 @@ CONTAINS
       zd1(5) = domain%m_zd(n5si2)
       zd1(6) = domain%m_zd(n6si2)
       zd1(7) = domain%m_zd(n7si2)
-      zd1(8) = domain%m_zd(n8si2)
 
       coefficient = - hourg * (0.01_RLK) * ss1 * mass1 / volume13
 
-      CALL CalcElemFBHourglassForce(xd1,yd1,zd1,                          &
-                                    hourgam, coefficient,                 &
+      CALL CalcElemFBHourglassForce(xd1, yd1, zd1,          &
+                                    hourgam, coefficient,   &
                                     hgfx, hgfy, hgfz)
 
       IF (numthreads > 1) THEN
-        fx_local(1:) => fx_elem(i3:)
+        fx_local(0:) => fx_elem(i3:)
+        fx_local(0) = hgfx(0)
         fx_local(1) = hgfx(1)
         fx_local(2) = hgfx(2)
         fx_local(3) = hgfx(3)
@@ -1202,9 +1241,9 @@ CONTAINS
         fx_local(5) = hgfx(5)
         fx_local(6) = hgfx(6)
         fx_local(7) = hgfx(7)
-        fx_local(8) = hgfx(8)
 
-        fy_local(1:) => fy_elem(i3:)
+        fy_local(0:) => fy_elem(i3:)
+        fy_local(0) = hgfy(0)
         fy_local(1) = hgfy(1)
         fy_local(2) = hgfy(2)
         fy_local(3) = hgfy(3)
@@ -1212,9 +1251,9 @@ CONTAINS
         fy_local(5) = hgfy(5)
         fy_local(6) = hgfy(6)
         fy_local(7) = hgfy(7)
-        fy_local(8) = hgfy(8)
 
-        fz_local(1:) => fz_elem(i3:)
+        fz_local(0:) => fz_elem(i3:)
+        fz_local(0) = hgfz(0)
         fz_local(1) = hgfz(1)
         fz_local(2) = hgfz(2)
         fz_local(3) = hgfz(3)
@@ -1222,20 +1261,23 @@ CONTAINS
         fz_local(5) = hgfz(5)
         fz_local(6) = hgfz(6)
         fz_local(7) = hgfz(7)
-        fz_local(8) = hgfz(8)
       ELSE
+        domain%m_fx(n0si2) = domain%m_fx(n0si2) + hgfx(0)
+        domain%m_fy(n0si2) = domain%m_fy(n0si2) + hgfy(0)
+        domain%m_fz(n0si2) = domain%m_fz(n0si2) + hgfz(0)
+
         domain%m_fx(n1si2) = domain%m_fx(n1si2) + hgfx(1)
         domain%m_fy(n1si2) = domain%m_fy(n1si2) + hgfy(1)
         domain%m_fz(n1si2) = domain%m_fz(n1si2) + hgfz(1)
-
+        
         domain%m_fx(n2si2) = domain%m_fx(n2si2) + hgfx(2)
         domain%m_fy(n2si2) = domain%m_fy(n2si2) + hgfy(2)
         domain%m_fz(n2si2) = domain%m_fz(n2si2) + hgfz(2)
-        
+
         domain%m_fx(n3si2) = domain%m_fx(n3si2) + hgfx(3)
         domain%m_fy(n3si2) = domain%m_fy(n3si2) + hgfy(3)
         domain%m_fz(n3si2) = domain%m_fz(n3si2) + hgfz(3)
-
+        
         domain%m_fx(n4si2) = domain%m_fx(n4si2) + hgfx(4)
         domain%m_fy(n4si2) = domain%m_fy(n4si2) + hgfy(4)
         domain%m_fz(n4si2) = domain%m_fz(n4si2) + hgfz(4)
@@ -1251,19 +1293,15 @@ CONTAINS
         domain%m_fx(n7si2) = domain%m_fx(n7si2) + hgfx(7)
         domain%m_fy(n7si2) = domain%m_fy(n7si2) + hgfy(7)
         domain%m_fz(n7si2) = domain%m_fz(n7si2) + hgfz(7)
-        
-        domain%m_fx(n8si2) = domain%m_fx(n8si2) + hgfx(8)
-        domain%m_fy(n8si2) = domain%m_fy(n8si2) + hgfy(8)
-        domain%m_fz(n8si2) = domain%m_fz(n8si2) + hgfz(8)
       ENDIF
     ENDDO
     !  !$OMP END PARALLEL DO
 
     IF (numthreads > 1) THEN
-      DO gnode=1, numNode
+      DO gnode=0, numNode-1
         count = domain%m_nodeElemCount(gnode)
-        cornerList = domain%m_nodeElemCornerList(gnode)  ! TODO(Ludger): How large does cornerList need to be preallocated for?
-        DO i=1, count
+        cornerList = domain%m_nodeElemCornerList(gnode,:)
+        DO i=0, count-1
           ielem = cornerList(i)
           fx_tmp = fx_tmp + fx_elem[ielem]
           fy_tmp = fy_tmp + fy_elem[ielem]
@@ -1295,14 +1333,14 @@ CONTAINS
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     INTEGER(KIND=4), PARAMETER :: VolumeError = -1
 
-    REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: dvdx
-    REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: dvdy
-    REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: dvdz
-    REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: x8n
-    REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: y8n
-    REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: z8n
-    REAL(KIND=8),DIMENSION(0:7) :: x1, y1, z1
-    REAL(KIND=8),DIMENSION(0:7) :: pfx, pfy, pfz
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: dvdx
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: dvdy
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: dvdz
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: x8n
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: y8n
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: z8n
+    REAL(KIND=8), DIMENSION(0:7) :: x1, y1, z1
+    REAL(KIND=8), DIMENSION(0:7) :: pfx, pfy, pfz
     INTEGER(KIND=4) :: numElem, numElem8, i, ii, jj
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode => NULL()
 
@@ -1314,12 +1352,14 @@ CONTAINS
     ALLOCATE(x8n(0:numElem8-1))
     ALLOCATE(y8n(0:numElem8-1))
     ALLOCATE(z8n(0:numElem8-1))
-
-    !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
+    
     ! start loop over elements
+!  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
     DO i=0, numElem-1
-      elemToNode => domain%m_nodelist(i*8:)
+      ! Index_t* elemToNode = domain.nodelist(i);
+      elemToNode => domain%m_nodelist(i)
       CALL CollectDomainNodesToElemNodes(domain, elemToNode, x1, y1, z1)
+      
       CALL CalcElemVolumeDerivative(pfx, pfy, pfz, x1, y1, z1)
 
       !   load into temporary storage for FB Hour Glass control
@@ -1345,7 +1385,7 @@ CONTAINS
 
     IF ( hgcoef > (0.0_RLK) ) THEN
       CALL CalcFBHourglassForceForElems(domain, determ, x8n, y8n, &
-                                        z8n,dvdx,dvdy,dvdz,hgcoef)
+                                        z8n, dvdx, dvdy, dvdz, hgcoef)
     ENDIF
 
     DEALLOCATE(z8n)
@@ -1355,7 +1395,7 @@ CONTAINS
     DEALLOCATE(dvdy)
     DEALLOCATE(dvdx)
 
-    RETURN
+    RETURN  ! TODO(Ludger): Do I actually need the return here?
 
   END SUBROUTINE CalcHourglassControlForElems
 
@@ -1369,14 +1409,13 @@ CONTAINS
     INTEGER(KIND=4) :: k
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8) :: hgcoef
-    REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: sigxx
-    REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: sigyy
-    REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: sigzz
-    REAL(KIND=8),DIMENSION(:),ALLOCATABLE :: determ
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: sigxx
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: sigyy
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: sigzz
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: determ
 
     ! Hacky hacky
     INTEGER(KIND=4), PARAMETER :: VolumeError = -1
-
 
     numElem = domain%m_numElem
     IF (numElem /= 0) THEN
@@ -1387,11 +1426,11 @@ CONTAINS
       ALLOCATE(determ(0:numElem-1))
 
       ! Sum contributions to total stress tensor
-      CALL InitStressTermsForElems(domain, numElem, sigxx, sigyy, sigzz)
+      CALL InitStressTermsForElems(domain, sigxx, sigyy, sigzz, numElem)
 
       ! Call elemlib stress integration loop to produce nodal forces from
-      !   material stresses.
-      CALL IntegrateStressForElems(domain, numElem, sigxx, sigyy, sigzz, determ)
+      ! material stresses.
+      CALL IntegrateStressForElems(domain, sigxx, sigyy, sigzz, determ, numElem)
 
       ! Check for negative element volume and abort if found
       !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
@@ -1418,11 +1457,9 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    INTEGER(KIND=4) :: numNode
+    INTEGER(KIND=4) :: numNode = domain%m_numNode
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4), PARAMETER :: RLK = 8
-
-    numNode = domain%m_numNode
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numNode)
     DO i=0, numNode-1
@@ -1435,21 +1472,15 @@ CONTAINS
     ! Calcforce calls partial, force, hourq
     CALL CalcVolumeForceForElems(domain)
 
-    ! Calculate Nodal Forces at domain boundaries
-    !   problem->commSBN->Transfer(CommSBN::forces)
-
   END SUBROUTINE CalcForceForNodes
-
 
 
   SUBROUTINE CalcAccelerationForNodes(domain)
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    INTEGER(KIND=4) :: numNode
+    INTEGER(KIND=4) :: numNode = domain%m_numNode
     INTEGER(KIND=4) :: i
-
-    numNode = domain%m_numNode
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numNode)
     DO i=0, numNode-1
@@ -1462,7 +1493,8 @@ CONTAINS
   END SUBROUTINE CalcAccelerationForNodes
 
 
-
+  ! NOTE: There are no checks implemented in the FORTRAN version
+  !       this needs to be checked with Jan.
   SUBROUTINE ApplyAccelerationBoundaryConditionsForNodes(domain)
     IMPLICIT NONE
 
@@ -1473,26 +1505,31 @@ CONTAINS
 
     numNodeBC = (domain%m_sizeX+1)*(domain%m_sizeX+1)
 
+    IF (domain%m_symmXempty() /= 0) THEN  ! Check if m_symmXempty() exists?
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numNodeBC)
-    DO i=0, numNodeBC-1
-      domain%m_xdd(domain%m_symmX(i)) = 0.0_RLK
-    ENDDO
+      DO i=0, numNodeBC-1
+        domain%m_xdd(domain%m_symmX(i)) = 0.0_RLK
+      ENDDO
 !  !$OMP END PARALLEL DO
+    ENDIF
 
+    IF (domain%m_symmYempty() /= 0) THEN  ! Check if m_symmYempty() exists?
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numNodeBC)
-    DO i=0, numNodeBC-1
-      domain%m_ydd(domain%m_symmY(i)) = 0.0_RLK
-    ENDDO
+      DO i=0, numNodeBC-1
+        domain%m_ydd(domain%m_symmY(i)) = 0.0_RLK
+      ENDDO
 !  !$OMP END PARALLEL DO
+    ENDIF
 
+    IF (domain%m_symmZempty() /= 0) THEN  ! Check if m_symmZempty() exists?
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numNodeBC)
-    DO i=0, numNodeBC-1
-      domain%m_zdd(domain%m_symmZ(i)) = 0.0_RLK
-    ENDDO
+      DO i=1, numNodeBC-1
+        domain%m_zdd(domain%m_symmZ(i)) = 0.0_RLK
+      ENDDO
 !  !$OMP END PARALLEL DO
+    ENDIF
 
   END SUBROUTINE ApplyAccelerationBoundaryConditionsForNodes
-
 
 
   SUBROUTINE CalcVelocityForNodes(domain, dt, u_cut)
@@ -1500,25 +1537,31 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8)    :: dt, u_cut
-    INTEGER(KIND=4) :: numNode
+    INTEGER(KIND=4) :: numNode = domain%m_numNode
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8)    :: xdtmp, ydtmp, zdtmp
 
-    numNode = domain%m_numNode
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numNode)
     DO i = 0, numNode-1
+
       xdtmp = domain%m_xd(i) + domain%m_xdd(i) * dt
-      if( ABS(xdtmp) < u_cut ) xdtmp = 0.0_RLK
+      IF( ABS(xdtmp) < u_cut ) THEN
+        xdtmp = 0.0_RLK
+      ENDIF
       domain%m_xd(i) = xdtmp
 
       ydtmp = domain%m_yd(i) + domain%m_ydd(i) * dt
-      if( ABS(ydtmp) < u_cut ) ydtmp = 0.0_RLK
+      IF( ABS(ydtmp) < u_cut ) THEN
+        ydtmp = 0.0_RLK
+      ENDIF
       domain%m_yd(i) = ydtmp
 
       zdtmp = domain%m_zd(i) + domain%m_zdd(i) * dt
-      if( ABS(zdtmp) < u_cut ) zdtmp = 0.0_RLK
+      IF( ABS(zdtmp) < u_cut ) THEN
+        zdtmp = 0.0_RLK
+      ENDIF
       domain%m_zd(i) = zdtmp
     ENDDO
 !  !$OMP END PARALLEL DO
@@ -1532,10 +1575,8 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8)    :: dt
-    INTEGER(KIND=4) :: numNode
+    INTEGER(KIND=4) :: numNode = domain%m_numNode
     INTEGER(KIND=4) :: i
-
-    numNode = domain%m_numNode
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numNode)
     DO i = 0, numNode-1
@@ -1553,11 +1594,8 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    REAL(KIND=8) :: delt
-    REAL(KIND=8) :: u_cut
-
-    delt  = domain%m_deltatime
-    u_cut = domain%m_u_cut
+    REAL(KIND=8) :: delt = domain%m_deltatime
+    REAL(KIND=8) :: u_cut = domain%m_u_cut
 
     ! Time of boundary condition evaluation is beginning of step for force and
     ! acceleration boundary conditions.
@@ -1586,35 +1624,35 @@ CONTAINS
 
     charLength = 0.0_RLK
 
-    a = AreaFace(x(0),x(1),x(2),x(3),  &
-                 y(0),y(1),y(2),y(3),  &
-                 z(0),z(1),z(2),z(3))
-    charLength = MAX(a,charLength)
-
-    a = AreaFace(x(4),x(5),x(6),x(7),  &
-                 y(4),y(5),y(6),y(7),  &
-                 z(4),z(5),z(6),z(7))
-    charLength = MAX(a,charLength)
-
-    a = AreaFace(x(0),x(1),x(5),x(4),  &
-                 y(0),y(1),y(5),y(4),  &
-                 z(0),z(1),z(5),z(4))
-    charLength = MAX(a,charLength)
-
-    a = AreaFace(x(1),x(2),x(6),x(5),  &
-                 y(1),y(2),y(6),y(5),  &
-                 z(1),z(2),z(6),z(5))
-    charLength = MAX(a,charLength)
-
-    a = AreaFace(x(2),x(3),x(7),x(6),  &
-                 y(2),y(3),y(7),y(6),  &
-                 z(2),z(3),z(7),z(6))
-    charLength = MAX(a,charLength)
-
-    a = AreaFace(x(3),x(0),x(4),x(7),  &
-                 y(3),y(0),y(4),y(7),  &
-                 z(3),z(0),z(4),z(7))
-    charLength = MAX(a,charLength)
+    a = AreaFace(x(0), x(1), x(2), x(3),  &
+                 y(0), y(1), y(2), y(3),  &
+                 z(0), z(1), z(2), z(3))
+    charLength = MAX(a, charLength)
+    
+    a = AreaFace(x(4), x(5), x(6), x(7),  &
+                 y(4), y(5), y(6), y(7),  &
+                 z(4), z(5), z(6), z(7))
+    charLength = MAX(a, charLength)
+    
+    a = AreaFace(x(0), x(1), x(5), x(4),  &
+                 y(0), y(1), y(5), y(4),  &
+                 z(0), z(1), z(5), z(4))
+    charLength = MAX(a, charLength)
+    
+    a = AreaFace(x(1), x(2), x(6), x(5),  &
+                 y(1), y(2), y(6), y(5),  &
+                 z(1), z(2), z(6), z(5))
+    charLength = MAX(a, charLength)
+    
+    a = AreaFace(x(2), x(3), x(7), x(6),  &
+                 y(2), y(3), y(7), y(6),  &
+                 z(2), z(3), z(7), z(6))
+    charLength = MAX(a, charLength)
+    
+    a = AreaFace(x(3), x(0), x(4), x(7),  &
+                 y(3), y(0), y(4), y(7),  &
+                 z(3), z(0), z(4), z(7))
+    charLength = MAX(a, charLength)
 
     charLength = (4.0_RLK) * volume / SQRT(charLength);
 
@@ -1629,7 +1667,7 @@ CONTAINS
     IMPLICIT NONE 
 
     REAL(KIND=8), DIMENSION(0:7),     INTENT(IN)  :: xvel, yvel, zvel
-    REAL(KIND=8), DIMENSION(0:7,0:2), INTENT(IN)  :: b   ![3,8]
+    REAL(KIND=8), DIMENSION(0:7,0:2), INTENT(IN)  :: b
     REAL(KIND=8),                     INTENT(IN)  :: detJ
     REAL(KIND=8), DIMENSION(0:5),     INTENT(OUT) :: d
     INTEGER(KIND=4), PARAMETER :: RLK = 8
@@ -1641,9 +1679,9 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:7) :: pfz
 
     inv_detJ = (1.0_RLK) / detJ
-    pfx = b(:,0)
-    pfy = b(:,1)
-    pfz = b(:,2)
+    pfx = b(:, 0)
+    pfy = b(:, 1)
+    pfz = b(:, 2)
 
     d(0) = inv_detJ * ( pfx(0) * (xvel(0)-xvel(6))   &
                       + pfx(1) * (xvel(1)-xvel(7))   &
@@ -1689,7 +1727,6 @@ CONTAINS
                        + pfz(1) * (yvel(1)-yvel(7))  &
                        + pfz(2) * (yvel(2)-yvel(4))  &
                        + pfz(3) * (yvel(3)-yvel(5)) )
-
     d(5) = (0.5_RLK) * ( dxddy + dyddx )
     d(4) = (0.5_RLK) * ( dxddz + dzddx )
     d(3) = (0.5_RLK) * ( dzddy + dyddz )
@@ -1698,7 +1735,11 @@ CONTAINS
 
 
 
-  SUBROUTINE CalcKinematicsForElems(domain, numElem, dt)
+!------------------------------------------------------------
+!   TO DEBUG BELOW THIS POINT!!!
+!------------------------------------------------------------
+
+  SUBROUTINE CalcKinematicsForElems(domain, dt, numElem)
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -1723,15 +1764,11 @@ CONTAINS
     !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem, dt)
     ! Loop over all elements
     DO k = 0, numElem-1
-      elemToNode => domain%m_nodelist(k*8:)
+      elemToNode => domain%m_nodelist(k, :)
 
       ! Get nodal coordinates from global arrays and copy into local arrays
-      DO lnode=0, 7
-        gnode = elemToNode(lnode+1)
-        x_local(lnode) = domain%m_x(gnode)
-        y_local(lnode) = domain%m_y(gnode)
-        z_local(lnode) = domain%m_z(gnode)
-      ENDDO
+      CollectDomainNodesToElemNodes(domain, elemToNode, &
+                                    x_local, y_local, z_local)
 
       ! Volume calculations
       volume = CalcElemVolume(x_local, y_local, z_local )
@@ -1745,7 +1782,7 @@ CONTAINS
 
       ! Get nodal velocities from global array and copy into local arrays.
       DO lnode=0, 7
-        gnode = elemToNode(lnode+1);
+        gnode = elemToNode(lnode);
         xd_local(lnode) = domain%m_xd(gnode)
         yd_local(lnode) = domain%m_yd(gnode)
         zd_local(lnode) = domain%m_zd(gnode)
@@ -1789,6 +1826,10 @@ CONTAINS
 
     numElem = domain%m_numElem
     IF (numElem > 0) THEN
+      deltatime = domain%m_deltatime
+
+      CALL AllocateStrains(domain, numElem)
+
       CALL CalcKinematicsForElems(domain, numElem, deltatime)
 
       ! Element loop to do some stuff not included in the elemlib function.
@@ -1810,6 +1851,9 @@ CONTAINS
         ENDIF
       ENDDO
 !  !$OMP END PARALLEL DO
+
+      ! Deallocate the strains
+      CALL DeallocateStrains(domain)
     ENDIF
 
   END SUBROUTINE CalcLagrangeElements
@@ -1822,19 +1866,19 @@ CONTAINS
     TYPE(domain_type), INTENT(INOUT) :: domain
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8), PARAMETER :: ptiny = 1.e-36_RLK
-    REAL(KIND=8)            :: ax,ay,az,dxv,dyv,dzv
-    REAL(KIND=8)            :: x0,x1,x2,x3,x4,x5,x6,x7
-    REAL(KIND=8)            :: y0,y1,y2,y3,y4,y5,y6,y7
-    REAL(KIND=8)            :: z0,z1,z2,z3,z4,z5,z6,z7
-    REAL(KIND=8)            :: xv0,xv1,xv2,xv3,xv4,xv5,xv6,xv7
-    REAL(KIND=8)            :: yv0,yv1,yv2,yv3,yv4,yv5,yv6,yv7
-    REAL(KIND=8)            :: zv0,zv1,zv2,zv3,zv4,zv5,zv6,zv7
+    REAL(KIND=8)            :: ax, ay, az, dxv, dyv, dzv
+    REAL(KIND=8)            :: x0, x1, x2, x3, x4, x5, x6, x7
+    REAL(KIND=8)            :: y0, y1, y2, y3, y4, y5, y6, y7
+    REAL(KIND=8)            :: z0, z1, z2, z3, z4, z5, z6, z7
+    REAL(KIND=8)            :: xv0, xv1, xv2, xv3, xv4, xv5, xv6, xv7
+    REAL(KIND=8)            :: yv0, yv1, yv2, yv3, yv4, yv5, yv6, yv7
+    REAL(KIND=8)            :: zv0, zv1, zv2, zv3, zv4, zv5, zv6, zv7
     REAL(KIND=8)            :: vol, norm
-    REAL(KIND=8)            :: dxi,dxj,dxk
-    REAL(KIND=8)            :: dyi,dyj,dyk
-    REAL(KIND=8)            :: dzi,dzj,dzk
+    REAL(KIND=8)            :: dxi, dxj, dxk
+    REAL(KIND=8)            :: dyi, dyj, dyk
+    REAL(KIND=8)            :: dzi, dzj, dzk
     INTEGER(KIND=4)         :: numElem, i
-    INTEGER(KIND=4)         :: n0,n1,n2,n3,n4,n5,n6,n7
+    INTEGER(KIND=4)         :: n0, n1, n2, n3, n4, n5, n6, n7
     INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode => NULL()
 
     numElem = domain%m_numElem
@@ -1842,15 +1886,15 @@ CONTAINS
     !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
     DO i=0, numElem-1
 
-      elemToNode => domain%m_nodelist(i*8:)
-      n0 = elemToNode(1)
-      n1 = elemToNode(2)
-      n2 = elemToNode(3)
-      n3 = elemToNode(4)
-      n4 = elemToNode(5)
-      n5 = elemToNode(6)
-      n6 = elemToNode(7)
-      n7 = elemToNode(8)
+      elemToNode => domain%m_nodelist(i, :)
+      n0 = elemToNode(0)
+      n1 = elemToNode(1)
+      n2 = elemToNode(2)
+      n3 = elemToNode(3)
+      n4 = elemToNode(4)
+      n5 = elemToNode(5)
+      n6 = elemToNode(6)
+      n7 = elemToNode(7)
 
       x0 = domain%m_x(n0)
       x1 = domain%m_x(n1)
@@ -1906,26 +1950,34 @@ CONTAINS
       zv6 = domain%m_zd(n6)
       zv7 = domain%m_zd(n7)
 
-      vol = domain%m_volo(i)*domain%m_vnew(i)
+      vol = domain%m_volo(i) * domain%m_vnew(i)
       norm = (1.0_RLK) / ( vol + ptiny )
 
-      dxj = (-0.25_RLK)*(SUM4(x0,x1,x5,x4) - SUM4(x3,x2,x6,x7))
-      dyj = (-0.25_RLK)*(SUM4(y0,y1,y5,y4) - SUM4(y3,y2,y6,y7))
-      dzj = (-0.25_RLK)*(SUM4(z0,z1,z5,z4) - SUM4(z3,z2,z6,z7))
+      dxj = (-0.25_RLK) * ((x0 + x1 + x5 + x4) - &
+                           (x3 + x2 + x6 + x7))
+      dyj = (-0.25_RLK) * ((y0 + y1 + y5 + y4) - &
+                           (y3 + y2 + y6 + y7))
+      dzj = (-0.25_RLK) * ((z0 + z1 + z5 + z4) - &
+                           (z3 + z2 + z6 + z7))
 
-      dxi = ( 0.25_RLK)*(SUM4(x1,x2,x6,x5) - SUM4(x0,x3,x7,x4))
-      dyi = ( 0.25_RLK)*(SUM4(y1,y2,y6,y5) - SUM4(y0,y3,y7,y4))
-      dzi = ( 0.25_RLK)*(SUM4(z1,z2,z6,z5) - SUM4(z0,z3,z7,z4))
+      dxi = ( 0.25_RLK) * ((x1 + x2 + x6 + x5) - &
+                           (x0 + x3 + x7 + x4))
+      dyi = ( 0.25_RLK) * ((y1 + y2 + y6 + y5) - &
+                           (y0 + y3 + y7 + y4))
+      dzi = ( 0.25_RLK) * ((z1 + z2 + z6 + z5) - &
+                           (z0 + z3 + z7 + z4))
 
-      dxk = ( 0.25_RLK)*(SUM4(x4,x5,x6,x7) - SUM4(x0,x1,x2,x3))
-      dyk = ( 0.25_RLK)*(SUM4(y4,y5,y6,y7) - SUM4(y0,y1,y2,y3))
-      dzk = ( 0.25_RLK)*(SUM4(z4,z5,z6,z7) - SUM4(z0,z1,z2,z3))
+      dxk = ( 0.25_RLK) * ((x4 + x5 + x6 + x7) - &
+                           (x0 + x1 + x2 + x3))
+      dyk = ( 0.25_RLK) * ((y4 + y5 + y6 + y7) - &
+                           (y0 + y1 + y2 + y3))
+      dzk = ( 0.25_RLK) * ((z4 + z5 + z6 + z7) - &
+                           (z0 + z1 + z2 + z3))
 
       ! Find delvk and delxk ( i cross j )
-
-      ax = dyi*dzj - dzi*dyj
-      ay = dzi*dxj - dxi*dzj
-      az = dxi*dyj - dyi*dxj
+      ax = dyi * dzj - dzi * dyj
+      ay = dzi * dxj - dxi * dzj
+      az = dxi * dyj - dyi * dxj
 
       domain%m_delx_zeta(i) = vol / SQRT(ax*ax + ay*ay + az*az + ptiny)
 
@@ -1933,17 +1985,19 @@ CONTAINS
       ay = ay * norm
       az = az * norm
 
-      dxv = (0.25_RLK)*(SUM4(xv4,xv5,xv6,xv7) - SUM4(xv0,xv1,xv2,xv3))
-      dyv = (0.25_RLK)*(SUM4(yv4,yv5,yv6,yv7) - SUM4(yv0,yv1,yv2,yv3))
-      dzv = (0.25_RLK)*(SUM4(zv4,zv5,zv6,zv7) - SUM4(zv0,zv1,zv2,zv3))
+      dxv = (0.25_RLK) * ((xv4 + xv5 + xv6 + xv7) - &
+                          (xv0 + xv1 + xv2 + xv3))
+      dyv = (0.25_RLK) * ((yv4 + yv5 + yv6 + yv7) - &
+                          (yv0 + yv1 + yv2 + yv3))
+      dzv = (0.25_RLK) * ((zv4 + zv5 + zv6 + zv7) - &
+                          (zv0 + zv1 + zv2 + zv3))
 
       domain%m_delv_zeta(i) = ax*dxv + ay*dyv + az*dzv
 
       ! Find delxi and delvi ( j cross k )
-
-      ax = dyj*dzk - dzj*dyk ;
-      ay = dzj*dxk - dxj*dzk ;
-      az = dxj*dyk - dyj*dxk ;
+      ax = dyj * dzk - dzj * dyk ;
+      ay = dzj * dxk - dxj * dzk ;
+      az = dxj * dyk - dyj * dxk ;
 
       domain%m_delx_xi(i) = vol / SQRT(ax*ax + ay*ay + az*az + ptiny) ;
 
@@ -1951,17 +2005,19 @@ CONTAINS
       ay = ay * norm
       az = az * norm
 
-      dxv = (0.25_RLK)*(SUM4(xv1,xv2,xv6,xv5) - SUM4(xv0,xv3,xv7,xv4)) ;
-      dyv = (0.25_RLK)*(SUM4(yv1,yv2,yv6,yv5) - SUM4(yv0,yv3,yv7,yv4)) ;
-      dzv = (0.25_RLK)*(SUM4(zv1,zv2,zv6,zv5) - SUM4(zv0,zv3,zv7,zv4)) ;
+      dxv = (0.25_RLK) * ((xv1 + xv2 + xv6 + xv5) - &
+                          (xv0 + xv3 + xv7 + xv4))
+      dyv = (0.25_RLK) * ((yv1 + yv2 + yv6 + yv5) - &
+                          (yv0 + yv3 + yv7 + yv4))
+      dzv = (0.25_RLK) * ((zv1 + zv2 + zv6 + zv5) - &
+                          (zv0 + zv3 + zv7 + zv4))
 
       domain%m_delv_xi(i) = ax*dxv + ay*dyv + az*dzv ;
 
       ! Find delxj and delvj ( k cross i )
-
-      ax = dyk*dzi - dzk*dyi ;
-      ay = dzk*dxi - dxk*dzi ;
-      az = dxk*dyi - dyk*dxi ;
+      ax = dyk * dzi - dzk * dyi
+      ay = dzk * dxi - dxk * dzi
+      az = dxk * dyi - dyk * dxi
 
       domain%m_delx_eta(i) = vol / SQRT(ax*ax + ay*ay + az*az + ptiny) ;
 
@@ -1969,9 +2025,12 @@ CONTAINS
       ay = ay * norm
       az = az * norm
 
-      dxv = (-0.25_RLK)*(SUM4(xv0,xv1,xv5,xv4) - SUM4(xv3,xv2,xv6,xv7)) ;
-      dyv = (-0.25_RLK)*(SUM4(yv0,yv1,yv5,yv4) - SUM4(yv3,yv2,yv6,yv7)) ;
-      dzv = (-0.25_RLK)*(SUM4(zv0,zv1,zv5,zv4) - SUM4(zv3,zv2,zv6,zv7)) ;
+      dxv = (-0.25_RLK) * ((xv0 + xv1 + xv5 + xv4) - &
+                           (xv3 + xv2 + xv6 + xv7)) ;
+      dyv = (-0.25_RLK) * ((yv0 + yv1 + yv5 + yv4) - &
+                           (yv3 + yv2 + yv6 + yv7)) ;
+      dzv = (-0.25_RLK) * ((zv0 + zv1 + zv5 + zv4) - &
+                           (zv3 + zv2 + zv6 + zv7)) ;
 
       domain%m_delv_eta(i) = ax*dxv + ay*dyv + az*dzv ;
     ENDDO
@@ -1981,10 +2040,7 @@ CONTAINS
 
 
 
-  SUBROUTINE CalcMonotonicQRegionForElems(domain, qlc_monoq, qqc_monoq,         &
-                                           monoq_limiter_mult, monoq_max_slope, &
-                                           ptiny,                               &
-                                           elength                              ) 
+  SUBROUTINE CalcMonotonicQRegionForElems(domain, elength, ptiny) 
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -2979,9 +3035,8 @@ CONTAINS
   REAL(KIND=8) FUNCTION CalcElemVolume( x, y, z )
 
     IMPLICIT NONE
-    REAL(KIND=8) ,DIMENSION(0:7) :: x, y, z
+    REAL(KIND=8), DIMENSION(1:8) :: x, y, z
     INTEGER(KIND=4), PARAMETER :: RLK = 8
-
     REAL(KIND=8)  :: volume=0.0_RLK
 
   !!$REAL(KIND=8)  :: x0, x1, x2, x3, x4, x5, x6, x7
@@ -3150,18 +3205,5 @@ CONTAINS
     RETURN
 
   END FUNCTION AreaFace
-
-
-
-  REAL(KIND=8) FUNCTION SUM4(a, b, c, d)
-
-    IMPLICIT NONE 
-    REAL(KIND=8) :: a, b, c, d
-
-    SUM4 = a + b + c + d
-
-    RETURN
-
-  END FUNCTION SUM4
 
 END MODULE
