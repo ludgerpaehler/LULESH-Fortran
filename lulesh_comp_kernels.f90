@@ -2040,6 +2040,7 @@ CONTAINS
 
 
 
+  ! TODO(Ludger): Check this function further, this is an easy way to mess up
   SUBROUTINE CalcMonotonicQRegionForElems(domain, elength, ptiny) 
     IMPLICIT NONE
 
@@ -2053,7 +2054,12 @@ CONTAINS
     REAL(KIND=8) :: qlin, qquad, phixi, phieta, phizeta, delvm, delvp
     REAL(KIND=8) :: norm, delvxxi, delvxeta, delvxzeta, rho
 
-    ! Hacky introduction of the necessary informationfor the boundary condition
+    monoq_limiter_mult = domain%m_monoq_limiter_mult
+    monoq_max_slope = domain%m_monoq_max_slope
+    qlc_monoq = domain%m_qlc_monoq
+    qqc_monoq = domain%m_qqc_monoq
+
+    ! Hacky introduction of the necessary information for the boundary conditions
     INTEGER, PARAMETER :: XI_M        = z'003' ! 0x003
     INTEGER, PARAMETER :: XI_M_SYMM   = z'001' ! 0x001
     INTEGER, PARAMETER :: XI_M_FREE   = z'002' ! 0x002
@@ -2080,33 +2086,33 @@ CONTAINS
 
 
     !  !$OMP PARALLEL DO FIRSTPRIVATE(qlc_monoq, qqc_monoq, monoq_limiter_mult, monoq_max_slope, ptiny)
-    DO ielem = 0, elength-1
-      i = domain%m_matElemlist(ielem)
-      bcMask = domain%m_elemBC(i)
+    DO i=0, elength-1
+      ielem = domain%m_matElemlist(i)
+      bcMask = domain%m_elemBC(ielem)
 
       ! Phixi
-      norm = (1.0_RLK) / ( domain%m_delv_xi(i) + ptiny )
+      norm = (1.0_RLK) / ( domain%m_delv_xi(ielem) + ptiny )
 
       SELECT CASE(IAND(bcMask, XI_M))
         CASE (0)
-          delvm = domain%m_delv_xi(domain%m_lxim(i))
+          delvm = domain%m_delv_xi(domain%m_lxim(ielem))
         CASE (XI_M_SYMM)
-          delvm = domain%m_delv_xi(i)
+          delvm = domain%m_delv_xi(ielem)
         CASE (XI_M_FREE)
           delvm = (0.0_RLK)
         CASE DEFAULT
-      ! ERROR
+        ! ERROR
       END SELECT
 
       SELECT CASE(IAND(bcMask, XI_P))
         CASE (0)
-          delvp = domain%m_delv_xi(domain%m_lxip(i))
+          delvp = domain%m_delv_xi(domain%m_lxip(ielem))
         CASE (XI_P_SYMM)
-          delvp = domain%m_delv_xi(i)
+          delvp = domain%m_delv_xi(ielem)
         CASE (XI_P_FREE)
           delvp = (0.0_RLK)
         CASE DEFAULT
-      ! ERROR 
+        ! ERROR 
       END SELECT
 
       delvm = delvm * norm
@@ -2117,20 +2123,28 @@ CONTAINS
       delvm = delvm * monoq_limiter_mult
       delvp = delvp * monoq_limiter_mult
 
-      if ( delvm < phixi ) phixi = delvm
-      if ( delvp < phixi ) phixi = delvp
-      if ( phixi < 0.0_RLK ) phixi = (0.0_RLK)
-      if ( phixi > monoq_max_slope) phixi = monoq_max_slope
+      IF ( delvm < phixi ) THEN 
+        phixi = delvm
+      ENDIF
+      IF ( delvp < phixi ) THEN
+        phixi = delvp
+      ENDIF
+      IF ( phixi < 0.0_RLK ) THEN
+        phixi = (0.0_RLK)
+      ENDIF
+      IF ( phixi > monoq_max_slope) THEN
+        phixi = monoq_max_slope
+      ENDIF
 
 
       ! phieta
-      norm = (1.0_RLK) / ( domain%m_delv_eta(i) + ptiny )
+      norm = (1.0_RLK) / ( domain%m_delv_eta(ielem) + ptiny )
 
       SELECT CASE(IAND(bcMask, ETA_M))
         CASE (0)
-          delvm = domain%m_delv_eta(domain%m_letam(i))
+          delvm = domain%m_delv_eta(domain%m_letam(ielem))
         CASE (ETA_M_SYMM)
-          delvm = domain%m_delv_eta(i)
+          delvm = domain%m_delv_eta(ielem)
         CASE (ETA_M_FREE)
           delvm = 0.0_RLK
         CASE DEFAULT
@@ -2138,13 +2152,13 @@ CONTAINS
       END SELECT
       SELECT CASE(IAND(bcMask, ETA_P))
         CASE (0)
-          delvp = domain%m_delv_eta(domain%m_letap(i))
+          delvp = domain%m_delv_eta(domain%m_letap(ielem))
         CASE (ETA_P_SYMM)
-          delvp = domain%m_delv_eta(i)
+          delvp = domain%m_delv_eta(ielem)
         CASE (ETA_P_FREE)
           delvp = (0.0_RLK)
         CASE DEFAULT
-      ! ERROR
+        ! ERROR
       END SELECT
 
       delvm = delvm * norm
@@ -2155,19 +2169,27 @@ CONTAINS
       delvm = delvm * monoq_limiter_mult
       delvp = delvp * monoq_limiter_mult
 
-      if ( delvm  < phieta ) phieta = delvm
-      if ( delvp  < phieta ) phieta = delvp
-      if ( phieta < (0.0_RLK)) phieta = (0.0_RLK)
-      if ( phieta > monoq_max_slope)  phieta = monoq_max_slope
+      IF ( delvm  < phieta ) THEN
+        phieta = delvm
+      ENDIF
+      IF ( delvp  < phieta ) THEN
+        phieta = delvp
+      ENDIF
+      IF ( phieta < (0.0_RLK)) THEN
+        phieta = (0.0_RLK)
+      ENDIF
+      IF ( phieta > monoq_max_slope) THEN
+        phieta = monoq_max_slope
+      ENDIF
 
       ! phizeta
-      norm = (1.0_RLK) / ( domain%m_delv_zeta(i) + ptiny ) ;
+      norm = (1.0_RLK) / ( domain%m_delv_zeta(ielem) + ptiny ) ;
 
       SELECT CASE(IAND(bcMask, ZETA_M))
         CASE (0)
-          delvm = domain%m_delv_zeta(domain%m_lzetam(i))
+          delvm = domain%m_delv_zeta(domain%m_lzetam(ielem))
         CASE (ZETA_M_SYMM)
-          delvm = domain%m_delv_zeta(i)
+          delvm = domain%m_delv_zeta(ielem)
         CASE (ZETA_M_FREE)
           delvm = (0.0_RLK)
         CASE DEFAULT
@@ -2175,9 +2197,9 @@ CONTAINS
       END SELECT
       SELECT CASE(IAND(bcMask, ZETA_P))
         CASE (0)
-          delvp = domain%m_delv_zeta(domain%m_lzetap(i))
+          delvp = domain%m_delv_zeta(domain%m_lzetap(ielem))
         CASE (ZETA_P_SYMM)
-          delvp = domain%m_delv_zeta(i)
+          delvp = domain%m_delv_zeta(ielem)
         CASE (ZETA_P_FREE)
           delvp = (0.0_RLK)
         CASE DEFAULT
@@ -2192,26 +2214,40 @@ CONTAINS
       delvm = delvm * monoq_limiter_mult
       delvp = delvp * monoq_limiter_mult
 
-      IF ( delvm   < phizeta ) phizeta = delvm
-      IF ( delvp   < phizeta ) phizeta = delvp
-      IF ( phizeta < (0.0_RLK) ) phizeta = (0.0_RLK)
-      IF ( phizeta > monoq_max_slope  ) phizeta = monoq_max_slope
+      IF ( delvm   < phizeta ) THEN
+        phizeta = delvm
+      ENDIF
+      IF ( delvp   < phizeta ) THEN
+        phizeta = delvp
+      ENDIF
+      IF ( phizeta < (0.0_RLK) ) THEN
+        phizeta = (0.0_RLK)
+      ENDIF
+      IF ( phizeta > monoq_max_slope  ) THEN
+        phizeta = monoq_max_slope
+      ENDIF
 
       ! Remove length scale
 
-      IF ( domain%m_vdov(i) > (0.0_RLK) ) THEN
+      IF ( domain%m_vdov(ielem) > (0.0_RLK) ) THEN
         qlin  = (0.0_RLK)
         qquad = (0.0_RLK)
       ELSE
-        delvxxi   = domain%m_delv_xi(i)   * domain%m_delx_xi(i)
-        delvxeta  = domain%m_delv_eta(i)  * domain%m_delx_eta(i)
-        delvxzeta = domain%m_delv_zeta(i) * domain%m_delx_zeta(i)
+        delvxxi   = domain%m_delv_xi(ielem)   * domain%m_delx_xi(ielem)
+        delvxeta  = domain%m_delv_eta(ielem)  * domain%m_delx_eta(ielem)
+        delvxzeta = domain%m_delv_zeta(ielem) * domain%m_delx_zeta(ielem)
 
-        IF ( delvxxi   > (0.0_RLK) ) delvxxi   = (0.0_RLK)
-        IF ( delvxeta  > (0.0_RLK) ) delvxeta  = (0.0_RLK)
-        IF ( delvxzeta > (0.0_RLK) ) delvxzeta = (0.0_RLK)
+        IF ( delvxxi   > (0.0_RLK) ) THEN
+          delvxxi   = (0.0_RLK)
+        ENDIF
+        IF ( delvxeta  > (0.0_RLK) ) THEN
+          delvxeta  = (0.0_RLK)
+        ENDIF
+        IF ( delvxzeta > (0.0_RLK) ) THEN
+          delvxzeta = (0.0_RLK)
+        ENDIF
 
-        rho = domain%m_elemMass(i) / (domain%m_volo(i) * domain%m_vnew(i))
+        rho = domain%m_elemMass(ielem) / (domain%m_volo(ielem) * domain%m_vnew(ielem))
 
         qlin = -qlc_monoq * rho *                      &
                (  delvxxi   * ((1.0_RLK) - phixi)  +     &
@@ -2224,8 +2260,8 @@ CONTAINS
                   delvxzeta*delvxzeta * ((1.0_RLK) - phizeta*phizeta)  )
       ENDIF
 
-      domain%m_qq(i) = qquad
-      domain%m_ql(i) = qlin
+      domain%m_qq(ielem) = qquad
+      domain%m_ql(ielem) = qlin
     ENDDO
     !  !$OMP END PARALLEL DO
 
@@ -2244,24 +2280,18 @@ CONTAINS
     REAL(KIND=8) :: qlc_monoq
     REAL(KIND=8) :: qqc_monoq
     INTEGER(KIND=4) :: elength     ! the elementset length
-    !
-    ! initialize parameters
-    !
-    monoq_max_slope    = domain%m_monoq_max_slope
-    monoq_limiter_mult = domain%m_monoq_limiter_mult
 
     !
     ! calculate the monotonic q for pure regions
     !
     elength = domain%m_numElem
     IF (elength > 0) THEN
-      qlc_monoq = domain%m_qlc_monoq
-      qqc_monoq = domain%m_qqc_monoq
-      CALL CalcMonotonicQRegionForElems( domain, qlc_monoq, qqc_monoq, &
-                                         monoq_limiter_mult,   &
-                                         monoq_max_slope,      &
-                                         ptiny, elength )
+      CALL CalcMonotonicQRegionForElems(domain, elength, ptiny)
     ENDIF
+
+    ! This should be the calculation of the monotonic q
+    ! for **all** regions! Need to keep a special eye on
+    ! this during debugging.
 
   END SUBROUTINE CalcMonotonicQForElems
 
@@ -2272,7 +2302,7 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8)    :: qstop
-    INTEGER(KIND=4) :: numElem, idx, i
+    INTEGER(KIND=4) :: numElem, allElem, idx, i
 
     INTEGER(KIND=4), PARAMETER :: QStopError  = -2
 
@@ -2282,18 +2312,25 @@ CONTAINS
     ! MONOTONIC Q option
     !
 
-    ! Calculate velocity gradients
-    CALL CalcMonotonicQGradientsForElems(domain)
-
-    ! Transfer veloctiy gradients in the first order elements
-    ! problem->commElements->Transfer(CommElements::monoQ)
-    CALL CalcMonotonicQForElems(domain)
-
-    ! Don't allow excessive artificial viscosity
     IF (numElem /= 0) THEN
+      allElem = numElem +                           &
+                2 * domain%m_sizeX*domain%m_sizeY + &  ! Plane ghosts
+                2 * domain%m_sizeX*domain%m_sizeZ + &  ! Row ghosts
+                2 * domain%m_sizeY*domain%m_sizeZ   ! Col ghosts
+
+      CALL AllocateGradients(domain, numElem, allElem)
+
+      CALL CalcMonotonicQGradientsForElems(domain)
+
+      CALL CalcMonotonicQForElems(domain)
+
+      ! Free up memory
+      CALL DeallocateGradients(domain)
+
+      ! Don't allow excessive artificial viscosity
       idx = -1
-      DO i = 0, numElem-1
-        IF ( domain%m_q(i) > qstop ) THEN
+      DO i=0, numElem-1
+        IF (domain%m_ql(i) > qstop) THEN
           idx = i
           EXIT
         ENDIF
