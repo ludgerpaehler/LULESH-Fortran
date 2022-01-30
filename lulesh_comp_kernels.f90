@@ -2345,7 +2345,7 @@ CONTAINS
 
 
 
-  SUBROUTINE CalcPressureForElems( p_new, bvc,         &
+  SUBROUTINE CalcPressureForElems( domain, p_new, bvc, &
                                    pbvc, e_old,        &
                                    compression, vnewc, &
                                    pmin,               &
@@ -2363,7 +2363,7 @@ CONTAINS
     REAL(KIND=8)    :: eosvmax
     INTEGER(KIND=4) :: length 
 
-    INTEGER(KIND=4) :: i
+    INTEGER(KIND=4) :: i, ielem
     REAL(KIND=8), PARAMETER :: c1s = (2.0_RLK)/(3.0_RLK)
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
@@ -2375,13 +2375,15 @@ CONTAINS
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length, pmin, p_cut, eosvmax)
     DO i = 0, length-1
+      ielem = domain%matElemlist(i)
+
       p_new(i) = bvc(i) * e_old(i)
 
       IF (ABS(p_new(i)) < p_cut) THEN
         p_new(i) = (0.0_RLK)
       ENDIF
 
-      IF ( vnewc(i) >= eosvmax ) THEN  ! impossible condition here?
+      IF ( vnewc(ielem) >= eosvmax ) THEN  ! impossible condition here?
         p_new(i) = (0.0_RLK)
       ENDIF
 
@@ -2419,7 +2421,7 @@ CONTAINS
     REAL(KIND=8)    :: eosvmax
     INTEGER(KIND=4) :: length
 
-    INTEGER(KIND=4) :: i
+    INTEGER(KIND=4) :: i, ielem
     REAL(KIND=8)    :: vhalf, ssc, q_tilde
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: pHalfStep
     REAL(KIND=8), PARAMETER :: TINY1 = 0.111111e-36_RLK
@@ -2440,8 +2442,9 @@ CONTAINS
     ENDDO
 !  !$OMP END PARALLEL DO
 
-    CALL CalcPressureForElems(pHalfStep, bvc, pbvc, e_new, compHalfStep,  &
-                              vnewc, pmin, p_cut, eosvmax, length)
+    CALL CalcPressureForElems(domain, pHalfStep, bvc, pbvc, e_new, &
+                              compHalfStep, vnewc, pmin, p_cut,    &
+                              eosvmax, length)
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length, rho0)
     DO i = 0, length-1
@@ -2451,8 +2454,8 @@ CONTAINS
         ! q_new(i) /* = qq(i) = ql(i) */ = Real_t(0.) ;
         q_new(i) = (0.0_RLK)
       ELSE
-        ssc = ( pbvc(i) * e_new(i)   &
-            + vhalf * vhalf * bvc(i) * pHalfStep(i) ) / rho0
+        ssc = (pbvc(i) * e_new(i) +   &
+               vhalf * vhalf * bvc(i) * pHalfStep(i)) / rho0
 
         IF ( ssc <= TINY1 ) THEN
           ssc = TINY3
@@ -2463,9 +2466,9 @@ CONTAINS
         q_new(i) = (ssc*ql(i) + qq(i))
       ENDIF
 
-      e_new(i) = e_new(i) + (0.5_RLK) * delvc(i)   &
-         * (  (3.0_RLK)*(p_old(i)     + q_old(i))  &
-            - (4.0_RLK)*(pHalfStep(i) + q_new(i)))
+      e_new(i) = e_new(i) + (0.5_RLK) * delvc(i)  *  &
+           (  (3.0_RLK)*(p_old(i)     + q_old(i)) -  &
+                (4.0_RLK)*(pHalfStep(i) + q_new(i)))
     ENDDO
 !  !$OMP END PARALLEL DO
 
@@ -2482,16 +2485,21 @@ CONTAINS
     ENDDO
 !  !$OMP END PARALLEL DO
 
-    CALL CalcPressureForElems(p_new, bvc, pbvc, e_new, compression,  &
-                              vnewc, pmin, p_cut, eosvmax, length)
+    CALL CalcPressureForElems(domain, p_new, bvc, pbvc, e_new, &
+                              compression, vnewc, pmin, p_cut, &
+                              eosvmax, length)
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length, rho0, emin, e_cut)
     DO i = 0, length-1
+      ! A little unsure about this line here
+      ielem = domain%m_matElemlist(i)
+
       IF (delvc(i) > (0.0_RLK)) THEN
         q_tilde = (0.0_RLK)
       ELSE
-        ssc = ( pbvc(i) * e_new(i)     &
-            + vnewc(i) * vnewc(i) * bvc(i) * p_new(i) ) / rho0
+        ssc = ( pbvc(i) * e_new(i)         &
+            + vnewc(ielem) * vnewc(ielem)  &
+            * bvc(i) * p_new(i) ) / rho0
 
         IF ( ssc <= TINY1 ) THEN
           ssc = TINY3
@@ -2515,14 +2523,18 @@ CONTAINS
     ENDDO
 !  !$OMP END PARALLEL DO
 
-    CALL CalcPressureForElems(p_new, bvc, pbvc, e_new, compression,  &
-                              vnewc, pmin, p_cut, eosvmax, length)
+    CALL CalcPressureForElems(domain, p_new, bvc, pbvc, e_new, &
+                              compression, vnewc, pmin, p_cut, &
+                              eosvmax, length)
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length, rho0, q_cut)
     DO i = 0, length-1
+      ielem = domain%m_matElemlist(i)
+
       IF ( delvc(i) <= (0.0_RLK) ) THEN
-        ssc = ( pbvc(i) * e_new(i)  &
-            + vnewc(i) * vnewc(i) * bvc(i) * p_new(i) ) / rho0
+        ssc = ( pbvc(i) * e_new(i)        &
+            + vnewc(ielem) * vnewc(ielem) &
+            * bvc(i) * p_new(i) ) / rho0
 
         IF ( ssc <= TINY1 ) THEN
           ssc = TINY3
