@@ -1812,11 +1812,11 @@ CONTAINS
 
 
 
-  SUBROUTINE CalcLagrangeElements(domain, deltatime)
+  SUBROUTINE CalcLagrangeElements(domain)
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    REAL(KIND=8)    :: deltatime
+    REAL(KIND=8)    :: deltatime = domain%m_deltatime
     REAL(KIND=8)    :: vdov, vdovthird
     INTEGER(KIND=4) :: numElem, k
 
@@ -2397,7 +2397,7 @@ CONTAINS
 
 
 
-  SUBROUTINE  CalcEnergyForElems( p_new,  e_new,  q_new,          &
+  SUBROUTINE  CalcEnergyForElems( domain, p_new,  e_new,  q_new,  &
                                   bvc,  pbvc,                     &
                                   p_old,  e_old,  q_old,          &
                                   compression,  compHalfStep,     &
@@ -2409,6 +2409,7 @@ CONTAINS
                                   length                          )
     IMPLICIT NONE 
 
+    TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8), DIMENSION(0:) :: p_new, e_new, q_new
     REAL(KIND=8), DIMENSION(0:) :: bvc,  pbvc
     REAL(KIND=8), DIMENSION(0:) :: p_old, e_old, q_old
@@ -2592,33 +2593,30 @@ CONTAINS
 
 
 
-  SUBROUTINE EvalEOSForElems(domain, vnewc, length)
+  SUBROUTINE EvalEOSForElems(domain, vnewc, length, rep)
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8), DIMENSION(0:) :: vnewc
     INTEGER :: length
     INTEGER(KIND=4), PARAMETER :: RLK = 8
+    INTEGER(KIND=4) :: rep
 
-    REAL(KIND=8) :: e_cut, p_cut, ss4o3, q_cut
-    REAL(KIND=8) :: eosvmax, eosvmin, pmin, emin, rho0
+    REAL(KIND=8) :: e_cut = domain%m_e_cut 
+    REAL(KIND=8) :: p_cut = domain%m_p_cut
+    REAL(KIND=8) :: ss4o3 = domain%m_ss4o3
+    REAL(KIND=8) :: q_cut = domain%m_q_cut
+    REAL(KIND=8) :: eosvmax = domain%m_eosvmax
+    REAL(KIND=8) :: eosvmin = domain%m_eosvmin
+    REAL(KIND=8) :: pmin = domain%m_pmin
+    REAL(KIND=8) :: emin = domain%m_emin
+    REAL(KIND=8) :: rho0 = domain%m_rho0
     REAL(KIND=8) :: vchalf
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: e_old, &
                   delvc, p_old, q_old, compression,   &
                   compHalfStep, qq, ql, work, p_new,  &
                   e_new, q_new, bvc, pbvc
-    INTEGER      :: i, zidx
-
-    e_cut = domain%m_e_cut
-    p_cut = domain%m_p_cut
-    ss4o3 = domain%m_ss4o3
-    q_cut = domain%m_q_cut
-
-    eosvmax = domain%m_eosvmax
-    eosvmin = domain%m_eosvmin
-    pmin    = domain%m_pmin
-    emin    = domain%m_emin
-    rho0    = domain%m_refdens
+    INTEGER      :: i, j, ielem
 
     ALLOCATE(e_old(0:length-1))
     ALLOCATE(delvc(0:length-1))
@@ -2635,69 +2633,72 @@ CONTAINS
     ALLOCATE(bvc(0:length-1))
     ALLOCATE(pbvc(0:length-1))
 
-    ! compress data, minimal set
+    ! Loop to add load imbalance based on region number
+    DO j=0, rep-1
+      ! compress data, minimal set
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
-    DO i = 0, length-1
-      zidx = domain%m_matElemlist(i) ;
-      e_old(i) = domain%m_e(zidx)
-      delvc(i) = domain%m_delv(zidx)
-      p_old(i) = domain%m_p(zidx)
-      q_old(i) = domain%m_q(zidx)
-      qq(i) = domain%m_qq(zidx)
-      ql(i) = domain%m_ql(zidx)
-    ENDDO
-!  !$OMP END PARALLEL DO
-
-!  !$OMP PARALLEL DO FIRSTPRIVATE(length)
-    DO i = 0, length-1
-      compression(i) = (1.0_RLK) / vnewc(i) - (1.0_RLK)
-      vchalf = vnewc(i) - delvc(i) * (0.5_RLK)
-      compHalfStep(i) = (1.0_RLK) / vchalf - (1.0_RLK)
-    ENDDO
-!  !$OMP END PARALLEL DO
-
-    ! Check for v > eosvmax or v < eosvmin
-    IF ( eosvmin /= (0.0_RLK) ) THEN
-      !  !$OMP PARALLEL DO FIRSTPRIVATE(length, eosvmin)
       DO i = 0, length-1
-        IF (vnewc(i) <= eosvmin) THEN  ! impossible due to calling func?
-          compHalfStep(i) = compression(i)
-        ENDIF
+        ielem = domain%m_matElemlist(i)
+        e_old(i) = domain%m_e(ielem)
+        delvc(i) = domain%m_delv(ielem)
+        p_old(i) = domain%m_p(ielem)
+        q_old(i) = domain%m_q(ielem)
+        qq(i) = domain%m_qq(ielem)
+        ql(i) = domain%m_ql(ielem)
       ENDDO
-      !  !$OMP END PARALLEL DO
-    ENDIF
-    IF ( eosvmax /= (0.0_RLK) ) THEN
+!  !$OMP END PARALLEL DO
+
+!  !$OMP PARALLEL DO FIRSTPRIVATE(length)
+      DO i = 0, length-1
+        ielem = domain%m_matElemlist(i)
+        compression(i) = (1.0_RLK) / vnewc(ielem) - (1.0_RLK)
+        vchalf = vnewc(ielem) - delvc(i) * (0.5_RLK)
+        compHalfStep(i) = (1.0_RLK) / vchalf - (1.0_RLK)
+      ENDDO
+!  !$OMP END PARALLEL DO
+
+      ! Check for v > eosvmax or v < eosvmin
+      IF ( eosvmin /= (0.0_RLK) ) THEN
+        !  !$OMP PARALLEL DO FIRSTPRIVATE(length, eosvmin)
+        DO i = 0, length-1
+          ielem = domain%m_matElemlist(i)
+          IF (vnewc(ielem) <= eosvmin) THEN  ! impossible due to calling func?
+            compHalfStep(i) = compression(i)
+          ENDIF
+        ENDDO
+        !  !$OMP END PARALLEL DO
+      ENDIF
+      IF ( eosvmax /= (0.0_RLK) ) THEN
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length, eosvmax)
-      DO i = 0, length-1
-        IF (vnewc(i) >= eosvmax) THEN ! impossible due to calling func? 
-          p_old(i)        = (0.0_RLK)
-          compression(i)  = (0.0_RLK)
-          compHalfStep(i) = (0.0_RLK)
-        ENDIF
-      ENDDO
+        DO i = 0, length-1
+          ielem = domain%m_matElemlist(i)
+          IF (vnewc(ielem) >= eosvmax) THEN ! impossible due to calling func? 
+            p_old(i)        = (0.0_RLK)
+            compression(i)  = (0.0_RLK)
+            compHalfStep(i) = (0.0_RLK)
+          ENDIF
+        ENDDO
 !  !$OMP END PARALLEL DO
-    ENDIF
+      ENDIF
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
-    DO i = 0, length-1
-      zidx = domain%m_matElemlist(i)
-      work(i) = (0.0_RLK)
-    ENDDO
+      DO i = 0, length-1
+        work(i) = (0.0_RLK)
+      ENDDO
 !  !$OMP END PARALLEL DO
-
-    CALL CalcEnergyForElems(p_new, e_new, q_new, bvc, pbvc,          &
+    ENDDO
+    CALL CalcEnergyForElems(domain, p_new, e_new, q_new, bvc, pbvc,  &
                             p_old, e_old,  q_old, compression,       &
                             compHalfStep, vnewc, work,  delvc, pmin, &
                             p_cut, e_cut, q_cut, emin,               &
                             qq, ql, rho0, eosvmax, length)
 
-
     !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
     DO i = 0, length-1
-      zidx = domain%m_matElemlist(i)
-      domain%m_p(zidx) = p_new(i)
-      domain%m_e(zidx) = e_new(i)
-      domain%m_q(zidx) = q_new(i)
+      ielem = domain%m_matElemlist(i)
+      domain%m_p(ielem) = p_new(i)
+      domain%m_e(ielem) = e_new(i)
+      domain%m_q(ielem) = q_new(i)
     ENDDO
     !  !$OMP END PARALLEL DO
 
@@ -2728,29 +2729,27 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    REAL(KIND=8)    :: eosvmin, eosvmax, vc
+    REAL(KIND=8) :: eosvmin = domain%m_eosvmin
+    REAL(KIND=8) :: eosvmax = domain%m_eosvmax
+    REAL(KIND=8) :: vc
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: vnewc
-    INTEGER(KIND=4) :: length, zn
+    INTEGER(KIND=4) :: length, ielem, numElemReg
+    INTEGER(KIND=4) :: i, r
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     ! Hacky hacky
-    INTEGER(KIND=4) :: i
-    INTEGER(KIND=4), PARAMETER :: RLK = 8
     INTEGER(KIND=4), PARAMETER :: VolumeError = -1
-
 
     length = domain%m_numElem
 
     IF (length /= 0) THEN
       ! Expose all of the variables needed for material evaluation
-      eosvmin = domain%m_eosvmin
-      eosvmax = domain%m_eosvmax
       ALLOCATE(vnewc(0:length-1))
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
       DO i = 0, length-1
-        zn = domain%m_matElemlist(i)
         !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
-        vnewc(i) = domain%m_vnew(zn)
+        vnewc(i) = domain%m_vnew(i)
       ENDDO
 !  !$OMP END PARALLEL DO
 
@@ -2776,26 +2775,43 @@ CONTAINS
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
       DO i = 0, length-1
-        zn = domain%m_matElemlist(i)
         !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
-        vc = domain%m_v(zn)
+        vc = domain%m_v(i)
         IF (eosvmin /= (0.0_RLK)) THEN
-          IF (vc < eosvmin) vc = eosvmin
+          IF (vc < eosvmin) THEN
+            vc = eosvmin
+          ENDIF
         ENDIF
         IF (eosvmax /= (0.0_RLK)) THEN
-          IF (vc > eosvmax) vc = eosvmax
+          IF (vc > eosvmax) THEN
+            vc = eosvmax
+          ENDIF
         ENDIF
         IF (vc <= 0.0_RLK) THEN
           CALL luabort(VolumeError)
         ENDIF
       ENDDO
 !  !$OMP END PARALLEL DO
+    ENDIF
+
+    DO r=0, domain%m_numReg-1
+      numElemReg = domain%m_regElemSize(r)  ! TODO(Ludger): Needs to be added to domain
+      ielem => domain%m_matElemlist(r)
+
+      ! Determine load imbalance for this region
+      ! round down the number with lowest cost
+      IF (r < domain%m_numReg/2) THEN
+        rep = 1
+      ELSE IF (r < (domain%m_numReg - (domain%m_numReg + 15)/20)) THEN
+        rep = 1 + domain%m_cost   ! TODO(Ludger): Really need to check whether that is actually in the domain!
+      ELSE
+        rep = 10 * (1 + domain%m_cost)
+      ENDIF
 
       CALL EvalEOSForElems(domain, vnewc, length)
+    ENDDO
 
-      DEALLOCATE(vnewc)
-
-    ENDIF
+    DEALLOCATE(vnewc)
 
   END SUBROUTINE ApplyMaterialPropertiesForElems
 
@@ -2805,14 +2821,13 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    ReAL(KIND=8)    :: v_cut, tmpV
-    INTEGER(KIND=4) :: numElem, i
+    REAL(KIND=8)    :: v_cut = domain%m_v_cut
+    REAL(KIND=8)    :: tmpV
+    INTEGER(KIND=4) :: numElem = domain%m_numElem
+    INTEGER(KIND=4) :: i
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
-    numElem = domain%m_numElem
-
     IF (numElem /= 0) THEN
-      v_cut = domain%m_v_cut
 !  !$OMP PARALLEL DO FIRSTPRIVATE(numElem, v_cut)
       DO i = 0, numElem - 1
         tmpV = domain%m_vnew(i)
@@ -2833,11 +2848,8 @@ CONTAINS
     IMPLICIT NONE 
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    REAL(KIND=8) :: deltatime
 
-    deltatime = domain%m_deltatime
-
-    CALL CalcLagrangeElements(domain, deltatime)
+    CALL CalcLagrangeElements(domain)
 
     ! Calculate Q.  (Monotonic q option requires communication)
     CALL CalcQForElems(domain)
@@ -2875,12 +2887,13 @@ CONTAINS
     
 #if _OPENMP
       threads = OMP_GET_MAX_THREADS()
+      ALLOCATE(dtcourant_per_thread(0:threads-1))
+      ALLOCATE(courant_elem_per_thread(0:threads-1))
 #else
       threads = 1_4
+      ALLOCATE(dtcourant_per_thread(0:threads-1))
+      ALLOCATE(courant_elem_per_thread(0:threads-1))
 #endif
-
-    ALLOCATE(dtcourant_per_thread(0:threads-1))
-    ALLOCATE(courant_elem_per_thread(0:threads-1))
 
     qqc = domain%m_qqc
 
@@ -2889,7 +2902,7 @@ CONTAINS
     !  !$OMP PARALLEL FIRSTPRIVATE(length, qqc) PRIVATE(qqc2, dtcourant_tmp, indx, thread_num, COURANT_ELEM)
     qqc2 = (64.0_RLK) * qqc * qqc
 
-    dtcourant_tmp = domain%m_dtcourant
+    dtcourant_tmp = domain%m_dtcourant  ! TODO(Ludger): Does this need to be a pointer?
     COURANT_ELEM = -1
 
 #if _OPENMP
@@ -2901,11 +2914,9 @@ CONTAINS
 !  !$OMP DO
     DO i = 0, length-1
       indx = domain%m_matElemlist(i)
-
       dtf = domain%m_ss(indx) * domain%m_ss(indx)
 
       IF ( domain%m_vdov(indx) < (0.0_RLK) ) THEN
-
         dtf = dtf + qqc2 * domain%m_arealg(indx) * domain%m_arealg(indx)  &
                   * domain%m_vdov(indx) * domain%m_vdov(indx)
       ENDIF
@@ -2915,13 +2926,11 @@ CONTAINS
 
       ! Determine minimum timestep with its corresponding elem
       IF (domain%m_vdov(indx) /= (0.0_RLK)) THEN
-        ! For sequential run (non OpenMP, replace line above with next line.
         IF ( dtf < dtcourant_tmp ) THEN
           dtcourant_tmp = dtf
           COURANT_ELEM = indx
         ENDIF
       ENDIF
-
     ENDDO
 !  !$OMP END DO
 
@@ -2942,9 +2951,6 @@ CONTAINS
       domain%m_dtcourant = dtcourant_per_thread(0)
     ENDIF
 
-    DEALLOCATE(dtcourant_per_thread)
-    DEALLOCATE(courant_elem_per_thread)
-
     RETURN
 
   END SUBROUTINE CalcCourantConstraintForElems
@@ -2960,28 +2966,26 @@ CONTAINS
     REAL(KIND=8) :: dvovmax, dtdvov
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: dthydro_per_thread
+    INTEGER(KIND=4), DIMENSION(:), ALLOCATABLE :: hydro_elem_per_thread
     INTEGER(KIND=4) :: hydro_elem
     INTEGER(KIND=4) :: threads, length
-    INTEGER(KIND=4), DIMENSION(:), ALLOCATABLE :: hydro_elem_per_thread
     INTEGER(KIND=4) :: indx, thread_num, i
     REAL(KIND=8) :: dthydro_tmp
 
 #if _OPENMP
       threads = OMP_GET_MAX_THREADS()
+      ALLOCATE(dthydro_per_thread(0:threads-1))
+      ALLOCATE(hydro_elem_per_thread(0:threads-1))
 #else
       threads = 1
+      ALLOCATE(dthydro_per_thread(0:threads-1))
+      ALLOCATE(hydro_elem_per_thread(0:threads-1))
 #endif
-
 
     dvovmax = domain%m_dvovmax
     length = domain%m_numElem
 
     ! CALL __ENZYME_INTEGER(hydro_elem)
-
-    ALLOCATE(dthydro_per_thread(0:threads-1))
-    ALLOCATE(hydro_elem_per_thread(0:threads-1))
-
-
     !  !$OMP PARALLEL FIRSTPRIVATE(length, dvovmax) PRIVATE(indx, thread_num, i, dthydro_tmp, hydro_elem)
 
 #if _OPENMP
@@ -3017,7 +3021,7 @@ CONTAINS
       ENDIF
     ENDDO
 
-    IF (hydro_elem /= -1) THEN
+    IF (hydro_elem_per_thread(0) /= -1) THEN
       domain%m_dthydro = dthydro_per_thread(0)
     ENDIF
 
@@ -3030,11 +3034,18 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    ! Evaluate time constraint
-    CALL CalcCourantConstraintForElems(domain)
 
-    ! Check hydro constraint
-    CALL CalcHydroConstraintForElems(domain)
+    ! Initialize conditions to a very large value
+    domain%m_dtcourant = 1.0e+20_RLK
+    domain%m_dthydro = 1.0e+20_RLK
+
+    DO r=0, domain%m_numReg-1
+      ! Evaluate time constraint
+      CALL CalcCourantConstraintForElems(domain)  ! TODO(Ludger): Check the region separation
+
+      ! Check hydro constraint
+      CALL CalcHydroConstraintForElems(domain)
+    ENDDO
 
   END SUBROUTINE CalcTimeConstraintsForElems
 
@@ -3085,7 +3096,7 @@ CONTAINS
   REAL(KIND=8) FUNCTION CalcElemVolume( x, y, z )
 
     IMPLICIT NONE
-    REAL(KIND=8), DIMENSION(1:8) :: x, y, z
+    REAL(KIND=8), DIMENSION(0:7) :: x, y, z
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8)  :: volume=0.0_RLK
 
@@ -3204,9 +3215,8 @@ CONTAINS
 
     volume = volume*twelveth
 
-
     CalcElemVolume=volume
-
+    RETURN
 
   END FUNCTION CalcElemVolume
 
