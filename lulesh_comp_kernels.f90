@@ -2557,7 +2557,7 @@ CONTAINS
 
   SUBROUTINE CalcSoundSpeedForElems(domain, vnewc,  rho0, enewc, &
                                     pnewc, pbvc,         &
-                                    bvc, ss4o3, nz       )
+                                    bvc, ss4o3, numElem       )
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -2567,23 +2567,24 @@ CONTAINS
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8) :: rho0
     REAL(KIND=8) :: ss4o3
-    INTEGER      :: nz
+    INTEGER      :: numElem
     REAL(KIND=8), PARAMETER :: TINY1 = 0.111111e-36_RLK
     REAL(KIND=8), PARAMETER :: TINY3 = 0.333333e-18_RLK
     REAL(KIND=8) :: ssTmp
-    INTEGER      :: i, iz
+    INTEGER      :: i, ielem
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(rho0, ss4o3)
-    DO i = 0, nz - 1
-      iz = domain%m_matElemlist(i)
-      ssTmp = (pbvc(i) * enewc(i) + vnewc(i) * vnewc(i) *  &
-                           bvc(i) * pnewc(i)) / rho0
+    DO i=0, numElem-1
+      ielem = domain%m_matElemlist(i)
+      ssTmp = (pbvc(i) * enewc(i)           &
+              + vnewc(ielem) * vnewc(ielem) &
+              * bvc(i) * pnewc(i)) / rho0
       IF (ssTmp <= TINY1) THEN
         ssTmp = TINY3
       ELSE
         ssTmp = SQRT(ssTmp)
       ENDIF
-      domain%m_ss(iz) = ssTmp
+      domain%m_ss(ielem) = ssTmp
     ENDDO
 !  !$OMP END PARALLEL DO
 
