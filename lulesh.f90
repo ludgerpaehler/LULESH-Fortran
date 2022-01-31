@@ -101,7 +101,8 @@ TYPE(domain_type) :: domain
 INTEGER :: edgeElems 
 INTEGER :: edgeNodes
 REAL(KIND=8) :: tx, ty, tz 
-INTEGER :: nidx, zidx 
+INTEGER :: nidx, zidx
+INTEGER :: col, row, plane, side
 INTEGER :: domElems
 INTEGER(KIND=4) :: grad_domElems
 INTEGER :: plane, row, col, i, j, k
@@ -112,8 +113,6 @@ INTEGER(KIND=4), DIMENSION(:), POINTER :: localNode => NULL()  ! Is this pointer
 REAL(KIND=8) :: volume
 REAL(KIND=8) :: starttim, endtim
 REAL(KIND=8) :: elapsed_time
-REAL(KIND=8) :: ebase = 3.948746e+7_RLK
-REAL(KIND=8) :: einit, scale
 
 ! Initial energy, which is later to be deposited
 REAL(KIND=8) :: ebase = 3.948746e+7_RLK
@@ -160,14 +159,20 @@ REAL(KIND=8) :: AbsDiff, RelDiff
 !CALL GETARG(1, arg)
 !READ(arg,*) edgeElems
 !edgeElems = 15  ! Fixed for debugging purposes
-edgeElems = 2  ! For debugging
+edgeElems = 2  ! For debugging  - opts.nx
 edgeNodes = edgeElems+1
+numRanks  = 1   ! Serial execution for now.
+myRank    = 0   ! Rank of the executor
+
 
 ! get run options to measure various metrics 
 
 !****************************
 !*   Initialize Sedov Mesh  *
 !****************************
+
+! Set up the mesh and decompose. Assumes regular cubes
+CALL InitMeshDecomp(numRanks, myRank, col, row, plane, side)
 
 ! Construct a uniform box for the domain
 domain%m_sizeX   = edgeElems 
@@ -336,8 +341,7 @@ END DO
  IF (edgeElems == 45) THEN  ! Copilot
     einit = einit*1.0e+7    ! Copilot
  END IF                     ! Copilot
-
-  
+ 
  ! set up symmetry nodesets
  nidx = 0
  

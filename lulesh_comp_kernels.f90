@@ -12,27 +12,35 @@ PRIVATE
     ! Node-centered 
     !--------------------------------------------------------------
   
-    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_x   ! coordinates 
+    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_x   ! coordinates - m_coord[idx].x 
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_y 
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_z 
   
-    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_xd  ! velocities 
+    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_xd  ! velocities - m_vel[idx].x
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_yd 
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_zd 
   
-    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_xdd  ! accelerations 
+    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_xdd  ! accelerations - m_acc[idx].x
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_ydd 
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_zdd 
   
-    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_fx   ! forces 
+    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_fx   ! forces - m_force[idx].x
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_fy 
     REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_fz 
   
-    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_nodalMass   ! mass 
+    REAL(KIND=8),    DIMENSION(:), ALLOCATABLE :: m_nodalMass   ! mass - m_nodalMass[idx]
   
-    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_symmX   ! symmetry plane nodesets 
+    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_symmX   ! symmetry plane nodesets - m_symmX[idx]
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_symmY 
-    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_symmZ 
+    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_symmZ
+    ! Missing the following syntax which is existent in the CPP version
+    ! bool symmXempty()  {return m_symmX.empty();}
+
+
+    ! Missing region information
+    INTEGER,     DIMENSIOn(:), ALLOCATABLE ::m_regElemSize   ! Size of region sets
+    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_regNumList    ! Region number per domain element
+    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_regElemlist   ! Region indexset  - see notes on call with Jan 
   
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_nodeElemCount 
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_nodeElemStart 
@@ -119,7 +127,10 @@ PRIVATE
     REAL(KIND=8)       ::   m_dthydro            ! volume change constraint 
     REAL(KIND=8)       ::   m_dtmax              ! maximum allowable time increment 
   
-    INTEGER ::   m_cycle              ! iteration count for simulation 
+    INTEGER ::   m_cycle              ! Iteration count for simulation
+
+    INTEGER :: m_numReg              ! Number of regions
+    INTEGER :: m_cost                ! Imbalance cost
   
     INTEGER ::   m_sizeX            ! X,Y,Z extent of this block 
     INTEGER ::   m_sizeY 
@@ -141,6 +152,7 @@ PRIVATE
   PUBLIC :: DeallocateStrains
   PUBLIC :: AllocateNodesets
   PUBLIC :: AllocateNodeElemIndexes
+  PUBLIC :: InitMeshDecomp
   PUBLIC :: TimeIncrement
   PUBLIC :: InitStressTermsForElems
   PUBLIC :: CalcElemShapeFunctionDerivatives
@@ -418,6 +430,47 @@ CONTAINS
 
 
   END SUBROUTINE AllocateNodeElemIndexes
+
+
+  SUBROUTINE InitMeshDecomp(numRanks, myRank, col, row, plane, side) RETURN(col, row, plane, side)
+    IMPLICIT NONE
+
+    INTEGER, INTENT(IN) :: numRanks
+    INTEGER, INTENT(IN) :: myRank
+    INTEGER, INTENT(OUT) :: col
+    INTEGER, INTENT(OUT) :: row
+    INTEGER, INTENT(OUT) :: plane
+    INTEGER, INTENT(OUT) :: side
+
+    INTEGER(KIND=4) :: testProcs
+    INTEGER(KIND=4) :: dx, dy, dz
+    INTEGER(KIND=4) :: myDom
+    INTEGER(KIND=4) :: remainder
+
+    ! Assume cube processor layout for now
+    testProcs   = NINT(CBRT(numRanks)+0.5_RLK)
+    IF (testProcs*testProcs*testProcs /= numRanks) THEN
+      EXIT
+    ENDIF
+
+    dx = testProcs
+    dy = testProcs
+    dz = testProcs
+
+    remainder = MOD(dx*dy*dz, numRanks)
+    IF (myRank < remainder) THEN
+      myDom = myRank*(1 + (dx*dy*dz / numRanks))
+    ELSE
+      myDom = remainder*(1 + (dx*dy*dz / numRanks)) + &
+          (myRank - remainder)*(dx*dy*dz / numRanks)
+    ENDIF
+
+    col   = MOD(myDom, testProcs)
+    row   = MOD(myDom / testProcs, testProcs)
+    plane = myDom / (testProcs*testProcs)
+    side  = testProcs
+
+  END SUBROUTINE
 
 
 
@@ -2041,7 +2094,7 @@ CONTAINS
 
 
   ! TODO(Ludger): Check this function further, this is an easy way to mess up
-  SUBROUTINE CalcMonotonicQRegionForElems(domain, elength, ptiny) 
+  SUBROUTINE CalcMonotonicQRegionForElems(domain, r, ptiny) 
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -2049,7 +2102,7 @@ CONTAINS
     REAL(KIND=8) :: monoq_limiter_mult,  monoq_max_slope
     REAL(KIND=8) :: ptiny
     INTEGER(KIND=4), PARAMETER :: RLK = 8
-    INTEGER(KIND=4) :: elength     ! the elementset length
+    INTEGER(KIND=4) :: r
     INTEGER(KIND=4) :: ielem, i, bcMask
     REAL(KIND=8) :: qlin, qquad, phixi, phieta, phizeta, delvm, delvp
     REAL(KIND=8) :: norm, delvxxi, delvxeta, delvxzeta, rho
@@ -2086,8 +2139,9 @@ CONTAINS
 
 
     !  !$OMP PARALLEL DO FIRSTPRIVATE(qlc_monoq, qqc_monoq, monoq_limiter_mult, monoq_max_slope, ptiny)
-    DO i=0, elength-1
-      ielem = domain%m_matElemlist(i)
+    DO i=0, domain%m_regElemSize(r)-1
+      ielem = domain%m_regElemlist(r, i)  !-> What does the r here do?
+      !ielem = domain%m_regElemlist(i)
       bcMask = domain%m_elemBC(ielem)
 
       ! Phixi
@@ -2279,19 +2333,15 @@ CONTAINS
     REAL(KIND=8) :: monoq_limiter_mult
     REAL(KIND=8) :: qlc_monoq
     REAL(KIND=8) :: qqc_monoq
-    INTEGER(KIND=4) :: elength     ! the elementset length
 
     !
     ! calculate the monotonic q for pure regions
     !
-    elength = domain%m_numElem
-    IF (elength > 0) THEN
-      CALL CalcMonotonicQRegionForElems(domain, elength, ptiny)
-    ENDIF
-
-    ! This should be the calculation of the monotonic q
-    ! for **all** regions! Need to keep a special eye on
-    ! this during debugging.
+    DO r=0, domain%m_numReg-1
+      IF (domain%m_regElemSize(r) > 0) THEN
+        CALL CalcMonotonicQRegionForElems(domain, r, ptiny)
+      ENDIF
+    ENDDO
 
   END SUBROUTINE CalcMonotonicQForElems
 
@@ -2492,8 +2542,7 @@ CONTAINS
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length, rho0, emin, e_cut)
     DO i = 0, length-1
-      ! A little unsure about this line here
-      ielem = domain%m_matElemlist(i)
+      ielem = domain%m_regElemlist(i)
 
       IF (delvc(i) > (0.0_RLK)) THEN
         q_tilde = (0.0_RLK)
@@ -2530,7 +2579,7 @@ CONTAINS
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length, rho0, q_cut)
     DO i = 0, length-1
-      ielem = domain%m_matElemlist(i)
+      ielem = domain%m_regElemlist(i)
 
       IF ( delvc(i) <= (0.0_RLK) ) THEN
         ssc = ( pbvc(i) * e_new(i)        &
@@ -2576,7 +2625,7 @@ CONTAINS
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(rho0, ss4o3)
     DO i=0, numElem-1
-      ielem = domain%m_matElemlist(i)
+      ielem = domain%m_regElemlist(i)
       ssTmp = (pbvc(i) * enewc(i)           &
               + vnewc(ielem) * vnewc(ielem) &
               * bvc(i) * pnewc(i)) / rho0
@@ -2638,7 +2687,7 @@ CONTAINS
       ! compress data, minimal set
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
       DO i = 0, length-1
-        ielem = domain%m_matElemlist(i)
+        ielem = domaiN%m_regElemlist(i)
         e_old(i) = domain%m_e(ielem)
         delvc(i) = domain%m_delv(ielem)
         p_old(i) = domain%m_p(ielem)
@@ -2650,7 +2699,7 @@ CONTAINS
 
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
       DO i = 0, length-1
-        ielem = domain%m_matElemlist(i)
+        ielem = domain%m_regElemlist(i)
         compression(i) = (1.0_RLK) / vnewc(ielem) - (1.0_RLK)
         vchalf = vnewc(ielem) - delvc(i) * (0.5_RLK)
         compHalfStep(i) = (1.0_RLK) / vchalf - (1.0_RLK)
@@ -2661,7 +2710,7 @@ CONTAINS
       IF ( eosvmin /= (0.0_RLK) ) THEN
         !  !$OMP PARALLEL DO FIRSTPRIVATE(length, eosvmin)
         DO i = 0, length-1
-          ielem = domain%m_matElemlist(i)
+          ielem = domain%m_regElemlist(i)
           IF (vnewc(ielem) <= eosvmin) THEN  ! impossible due to calling func?
             compHalfStep(i) = compression(i)
           ENDIF
@@ -2671,7 +2720,7 @@ CONTAINS
       IF ( eosvmax /= (0.0_RLK) ) THEN
 !  !$OMP PARALLEL DO FIRSTPRIVATE(length, eosvmax)
         DO i = 0, length-1
-          ielem = domain%m_matElemlist(i)
+          ielem = domain$m_regElemlist(i)
           IF (vnewc(ielem) >= eosvmax) THEN ! impossible due to calling func? 
             p_old(i)        = (0.0_RLK)
             compression(i)  = (0.0_RLK)
@@ -2695,7 +2744,7 @@ CONTAINS
 
     !  !$OMP PARALLEL DO FIRSTPRIVATE(length)
     DO i = 0, length-1
-      ielem = domain%m_matElemlist(i)
+      ielem = domain%m_regElemlist(i)
       domain%m_p(ielem) = p_new(i)
       domain%m_e(ielem) = e_new(i)
       domain%m_q(ielem) = q_new(i)
@@ -2795,15 +2844,15 @@ CONTAINS
     ENDIF
 
     DO r=0, domain%m_numReg-1
-      numElemReg = domain%m_regElemSize(r)  ! TODO(Ludger): Needs to be added to domain
-      ielem => domain%m_matElemlist(r)
+      numElemReg = domain%m_regElemSize(r)
+      ielem => domain%m_regElemlist(r)
 
       ! Determine load imbalance for this region
       ! round down the number with lowest cost
       IF (r < domain%m_numReg/2) THEN
         rep = 1
       ELSE IF (r < (domain%m_numReg - (domain%m_numReg + 15)/20)) THEN
-        rep = 1 + domain%m_cost   ! TODO(Ludger): Really need to check whether that is actually in the domain!
+        rep = 1 + domain%m_cost
       ELSE
         rep = 10 * (1 + domain%m_cost)
       ENDIF
@@ -2913,7 +2962,7 @@ CONTAINS
 
 !  !$OMP DO
     DO i = 0, length-1
-      indx = domain%m_matElemlist(i)
+      indx = domain%m_regElemlist(i)
       dtf = domain%m_ss(indx) * domain%m_ss(indx)
 
       IF ( domain%m_vdov(indx) < (0.0_RLK) ) THEN
@@ -2998,7 +3047,7 @@ CONTAINS
 
 !  !$OMP DO
     DO i = 0, length-1
-      indx = domain%m_matElemlist(i)
+      indx = domain%m_regElemlist(i)
       !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
       IF (domain%m_vdov(indx) /= (0.0_RLK)) THEN
         dtdvov = dvovmax / (ABS(domain%m_vdov(indx))+(1.e-20_RLK))
