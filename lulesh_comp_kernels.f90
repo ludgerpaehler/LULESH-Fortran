@@ -1,5 +1,10 @@
 MODULE lulesh_comp_kernels
 
+! Use Open-MP, the call on the module level covers all subroutines contained herein
+#if _OPENMP
+  USE OMP_LIB
+#endif
+
 IMPLICIT NONE
 PRIVATE 
 
@@ -803,7 +808,6 @@ CONTAINS
 
 
   SUBROUTINE IntegrateStressForElems(domain, sigxx, sigyy, sigzz, determ, numElem)
-    USE OMP_LIB
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -1106,7 +1110,6 @@ CONTAINS
   ! *               force.
   ! *
   ! *************************************************
-    USE OMP_LIB
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -2930,7 +2933,6 @@ CONTAINS
 
 
   SUBROUTINE CalcCourantConstraintForElems(domain)
-    USE OMP_LIB
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -3024,7 +3026,6 @@ CONTAINS
 
 
   SUBROUTINE CalcHydroConstraintForElems(domain)
-    USE OMP_LIB
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
