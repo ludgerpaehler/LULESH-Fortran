@@ -174,6 +174,10 @@ myRank    = 0   ! Rank of the executor
 ! Set up the mesh and decompose. Assumes regular cubes
 CALL InitMeshDecomp(numRanks, myRank, col, row, plane, side)
 
+
+! Everything below this point is the domain initialization!
+
+
 ! Construct a uniform box for the domain
 domain%m_sizeX   = edgeElems 
 domain%m_sizeY   = edgeElems 
