@@ -543,13 +543,12 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:) :: sigzz
     INTEGER(KIND=4) :: ii
 
-!  !$OMP PARALLEL DO FIRSTPRIVATE(numElem)
+!$OMP PARALLEL DO PRIVATE(ii) DEFAULT(none) SHARED(domain, sigxx, sigyy, sigzz)
     DO ii = 1, numElem
       sigxx(ii) =  - domain%m_p(ii) - domain%m_q(ii)
       sigyy(ii) =  - domain%m_p(ii) - domain%m_q(ii)
       sigzz(ii) =  - domain%m_p(ii) - domain%m_q(ii)
-    ENDDO
-!  !$OMP 
+    ENDDO 
 
  END SUBROUTINE InitStressTermsForElems
 
@@ -784,7 +783,8 @@ CONTAINS
 
 
 
-  SUBROUTINE SumElemStressesToNodeForces(B, stress_xx, stress_yy, stress_zz,  fx,  fy,  fz)
+  SUBROUTINE SumElemStressesToNodeForces(B, stress_xx, stress_yy, stress_zz, &
+                                         fx,  fy,  fz)
     IMPLICIT NONE
 
     REAL(KIND=8) ,DIMENSION(0:7, 0:2) :: B
@@ -803,7 +803,7 @@ CONTAINS
 
 
   SUBROUTINE IntegrateStressForElems(domain, sigxx, sigyy, sigzz, determ, numElem)
-    !USE OMP_LIB
+    USE OMP_LIB
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
@@ -840,7 +840,8 @@ CONTAINS
       ALLOCATE(fz_elem(0:numElem8-1))
     ENDIF
     
-!$OMP PARALLEL DO PRIVATE(kk, lnode, gnode, elemToNode, B, x_local, y_local, z_local) DEFAULT(none) SHARED(domain, sigxx, sigyy, sigzz, fx_elem, fy_elem, fz_elem)
+!$OMP PARALLEL DO PRIVATE(kk, lnode, gnode, elemToNode, B, x_local, y_local, z_local)  &
+!$OMP DEFAULT(none) SHARED(domain, sigxx, sigyy, sigzz, fx_elem, fy_elem, fz_elem)
     DO kk=0, numElem-1
       elemToNode => domain%m_nodelist(kk, :)  ! Adjusted index here
 
@@ -876,7 +877,8 @@ CONTAINS
 
 
     IF (numthreads > 1) THEN
-!$OMP PARALLEL DO PRIVATE(gnode, count, cornerList, fx_tmp, fy_tmp, fz_tmp, i, ielem) DEFAULT(none) SHARED(domain, fx_elem, fy_elem, fz_elem)
+!$OMP PARALLEL DO PRIVATE(gnode, count, cornerList, fx_tmp, fy_tmp, fz_tmp, i, ielem)  &
+!$OMP DEFAULT(none) SHARED(domain, fx_elem, fy_elem, fz_elem)
       DO gnode=0, numNode-1
         count = domain%m_nodeElemCount(gnode)
         cornerList = domain%m_nodeElemCornerList(gnode, :)
@@ -1184,7 +1186,11 @@ CONTAINS
   ! *************************************************
   ! compute the hourglass modes
 
-!$OMP PARALLEL DO PRIVATE(i2, elemToNode, fx_local, fy_local, fz_local, hgfx, hgfy, hgfz, coefficient, hourgam, xd1, yd1, zd1, i3, volinv, ss1, mass1, volume13, i1, hourmodx, hourmody, hourmodz, n0si1, n1si2, n2si2, n3si2, n4si2, n5si2, n6si2, n7si2) DEFAULT(none) SHARED(domain, determ, gamma, x8n, y8n, z8n)
+!$OMP PARALLEL DO PRIVATE(i2, elemToNode, fx_local, fy_local, fz_local, hgfx, hgfy,  &
+!$OMP                     hgfz, coefficient, hourgam, xd1, yd1, zd1, i3, volinv,     &
+!$OMP                     ss1, mass1, volume13, i1, hourmodx, hourmody, hourmodz,    &
+!$OMP                     n0si1, n1si2, n2si2, n3si2, n4si2, n5si2, n6si2, n7si2)    &
+!$OMP DEFAULT(none) SHARED(domain, determ, gamma, x8n, y8n, z8n)
     DO i2=0, numElem-1
 
       elemToNode => domain%m_nodelist(i2, :)
@@ -1354,7 +1360,8 @@ CONTAINS
 
 
     IF (numthreads > 1) THEN
-!$OMP PARALLEL DO PRIVATE(gnode, count, cornerList, fx_tmp, fy_tmp, fz_tmp, i, ielem) DEFAULT(none) SHARED(domain, fx_elem, fy_elem, fz_elem)
+!$OMP PARALLEL DO PRIVATE(gnode, count, cornerList, fx_tmp, fy_tmp, fz_tmp, i, ielem)  &
+!$OMP DEFAULT(none) SHARED(domain, fx_elem, fy_elem, fz_elem)
       DO gnode=0, numNode-1
         count = domain%m_nodeElemCount(gnode)
         cornerList = domain%m_nodeElemCornerList(gnode,:)
@@ -1411,7 +1418,8 @@ CONTAINS
     ALLOCATE(z8n(0:numElem8-1))
     
     ! start loop over elements
-!$OMP PARALLEL DO PRIVATE(i, x1, y1, z1, pfx, pfy, pfz, elemToNode, ii, jj) DEFAULT(none) SHARED(domain, determ)
+!$OMP PARALLEL DO PRIVATE(i, x1, y1, z1, pfx, pfy, pfz, elemToNode, ii, jj)  &
+!$OMP DEFAULT(none) SHARED(domain, determ)
     DO i=0, numElem-1
       ! Index_t* elemToNode = domain.nodelist(i);
       elemToNode => domain%m_nodelist(i)
@@ -1452,7 +1460,7 @@ CONTAINS
     DEALLOCATE(dvdy)
     DEALLOCATE(dvdx)
 
-    RETURN  ! TODO(Ludger): Do I actually need the return here?
+    RETURN
 
   END SUBROUTINE CalcHourglassControlForElems
 
@@ -1594,7 +1602,8 @@ CONTAINS
     REAL(KIND=8)    :: xdtmp, ydtmp, zdtmp
 
 
-!$OMP PARALLEL DO PRIVATE(i, xdtmp, ydtmp, zdtmp) DEFAULT(none) SHARED(domain, dt, u_cut)
+!$OMP PARALLEL DO PRIVATE(i, xdtmp, ydtmp, zdtmp) DEFAULT(none)   &
+!$OMP SHARED(domain, dt, u_cut)
     DO i = 0, numNode-1
 
       xdtmp = domain%m_xd(i) + domain%m_xdd(i) * dt
@@ -1646,8 +1655,8 @@ CONTAINS
     REAL(KIND=8) :: delt = domain%m_deltatime
     REAL(KIND=8) :: u_cut = domain%m_u_cut
 
-    ! Time of boundary condition evaluation is beginning of step for force and
-    ! acceleration boundary conditions.
+    ! Time of boundary condition evaluation is beginning of
+    ! step for force and acceleration boundary conditions.
     CALL CalcForceForNodes(domain)
 
     CALL CalcAccelerationForNodes(domain)
@@ -1806,7 +1815,10 @@ CONTAINS
     detJ = 0.0_RLK
 
     ! Loop over all elements
-!$OMP PARALLEL DO PRIVATE(k, B, D, x_local, y_local, z_local, xd_local, yd_local, zd_local, detJ, volume, relativeVolume, elemToNode, lnode, gnode, dt2, j) DEFAULT(none) SHARED(domain)
+!$OMP PARALLEL DO PRIVATE(k, B, D, x_local, y_local, z_local, xd_local, yd_local,  &
+!$OMP                     zd_local, detJ, volume, relativeVolume, elemToNode,      &
+!$OMP                     lnode, gnode, dt2, j)                                    &
+!$OMP DEFAULT(none) SHARED(domain)
     DO k = 0, numElem-1
       elemToNode => domain%m_nodelist(k, :)
 
@@ -1925,8 +1937,14 @@ CONTAINS
 
     numElem = domain%m_numElem
 
-!TODO(Ludger): Check Open-MP Statements below this point!
-!$OMP PARALLEL DO PRIVATE(i, ptiny, ax, ay, az, dxv, dyv, dzv, elemToNode, n0, n1, n2, n3, n4, n5, n6, n7, x0, x1, x2, x3, x4, x5, x6, x7, y0, y1, y2, y3, y4, y5, y6, y7, z0, z1, z2, z3, z4, z5, z6, z7, xv0, xv1, xv2, xv3, xv4, xv5, xv6, xv7, yv0, yv1, yv2, yv3, yv4, yv5, yv6, yv7, zv0, zv1, zv2, zv3, zv4, zv5, zv6, zv7, vol, norm, dxj, dyj, dzj, dxi, dyi, dzi, dxk, dyk, dzk) DEFAULT(none) SHARED(domain, ptiny)
+!$OMP PARALLEL DO PRIVATE(i, ptiny, ax, ay, az, dxv, dyv, dzv, elemToNode, n0,  &
+!$OMP                     n1, n2, n3, n4, n5, n6, n7, x0, x1, x2, x3, x4, x5,   &
+!$OMP                     x6, x7, y0, y1, y2, y3, y4, y5, y6, y7, z0, z1, z2,   &
+!$OMP                     z3, z4, z5, z6, z7, xv0, xv1, xv2, xv3, xv4, xv5,     &
+!$OMP                     xv6, xv7, yv0, yv1, yv2, yv3, yv4, yv5, yv6, yv7,     &
+!$OMP                     zv0, zv1, zv2, zv3, zv4, zv5, zv6, zv7, vol, norm,    &
+!$OMP                     dxj, dyj, dzj, dxi, dyi, dzi, dxk, dyk, dzk)          &
+!$OMP DEFAULT(none) SHARED(domain, ptiny)
     DO i=0, numElem-1
 
       elemToNode => domain%m_nodelist(i, :)
@@ -2128,7 +2146,14 @@ CONTAINS
     INTEGER, PARAMETER :: ZETA_P_FREE = z'800' ! 0x800
 
 
-!$OMP PARALLEL DO PRIVATE(i, ielem, qlin, qquad, phixi, phieta, phizeta, bcMask, delvm, norm, delvxxi, delvxeta, delvxzeta, rho) DEFAULT(none) SHARED(domain, ptiny, XI_M, XI_M_SYMM, XI_M_FREE, XI_P, XI_P_COMM, XI_P_SYMM, XI_P_FREE, monoq_limiter_mult, monoq_max_slope, ETA_M, ETA_M_COMM, ETA_M_SYMM, ETA_M_FREE, ETA_P, ETA_P_COMM, ETA_P_SYMM, ETA_P_FREE, ZETA_M, ZETA_M_SYMM, ZETA_M_FREE, ZETA_P, ZETA_P_COMM, ZETA_P_SYMM, ZETA_P_FREE)
+!$OMP PARALLEL DO PRIVATE(i, ielem, qlin, qquad, phixi, phieta, phizeta, bcMask,   &
+!$OMP                     delvm, norm, delvxxi, delvxeta, delvxzeta, rho)          &
+!$OMP DEFAULT(none) SHARED(domain, ptiny, XI_M, XI_M_SYMM, XI_M_FREE, XI_P,        &
+!$OMP                      XI_P_COMM, XI_P_SYMM, XI_P_FREE, monoq_limiter_mult,    &
+!$OMP                      monoq_max_slope, ETA_M, ETA_M_COMM, ETA_M_SYMM,         &
+!$OMP                      ETA_M_FREE, ETA_P, ETA_P_COMM, ETA_P_SYMM, ETA_P_FREE,  &
+!$OMP                      ZETA_M, ZETA_M_SYMM, ZETA_M_FREE, ZETA_P, ZETA_P_COMM,  &
+!$OMP                      ZETA_P_SYMM, ZETA_P_FREE)
     DO i=0, domain%m_regElemSize(r)-1
       ielem = domain%m_regElemlist(r, i)  !-> What does the r here do?
       !ielem = domain%m_regElemlist(i)
@@ -2179,7 +2204,6 @@ CONTAINS
       IF ( phixi > monoq_max_slope) THEN
         phixi = monoq_max_slope
       ENDIF
-
 
       ! phieta
       norm = (1.0_RLK) / ( domain%m_delv_eta(ielem) + ptiny )
@@ -2412,7 +2436,8 @@ CONTAINS
       pbvc(i) = c1s
     ENDDO
 
-!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none) SHARED(domain, p_new, bvc, e_old, p_cut, vnewc, eosvmax, pmin)
+!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none)   &
+!$OMP SHARED(domain, p_new, bvc, e_old, p_cut, vnewc, eosvmax, pmin)
     DO i = 0, length-1
       ielem = domain%matElemlist(i)
 
@@ -2470,7 +2495,8 @@ CONTAINS
 
     ALLOCATE(pHalfStep(0:length-1))
 
-!$OMP PARALLEL DO PRIVATE(i) DEFAULT(none) SHARED(e_new, e_old, delvc, p_old, q_old, work, emin)
+!$OMP PARALLEL DO PRIVATE(i) DEFAULT(none)   &
+!$OMP SHARED(e_new, e_old, delvc, p_old, q_old, work, emin)
     DO i = 0, length-1
       e_new(i) = e_old(i) - (0.5_RLK) * delvc(i) * (p_old(i) + q_old(i))  &
                + (0.5_RLK) * work(i)
@@ -2484,7 +2510,9 @@ CONTAINS
                               compHalfStep, vnewc, pmin, p_cut,    &
                               eosvmax, length)
 
-!$OMP PARALLEL DO PRIVATE(i, vhalf, ssc) DEFAULT(none) SHARED(compHalfStep, delvc, q_new, pbvc, e_new, vhalf, bvc, pHalfStep, rho0, ql, qq, p_old, q_old, TINY1, TINY3)
+!$OMP PARALLEL DO PRIVATE(i, vhalf, ssc) DEFAULT(none)              &
+!$OMP SHARED(compHalfStep, delvc, q_new, pbvc, e_new, vhalf, bvc,   &
+!$OMP        pHalfStep, rho0, ql, qq, p_old, q_old, TINY1, TINY3)
     DO i = 0, length-1
       vhalf = (1.0_RLK) / ((1.0_RLK) + compHalfStep(i))
 
@@ -2524,7 +2552,9 @@ CONTAINS
                               compression, vnewc, pmin, p_cut, &
                               eosvmax, length)
 
-!$OMP PARALLEL DO PRIVATE(i, sixth, ielem, q_tilde, ssc) DEFAULT(none) SHARED(domain, delvc, pbvc, e_new, vnewc, bvc, p_new, rho0, TINY1, TINY3, ql, qq, p_old, q_old, pHalfStep, q_new, delvc, e_cut, emin)
+!$OMP PARALLEL DO PRIVATE(i, sixth, ielem, q_tilde, ssc) DEFAULT(none)            &
+!$OMP SHARED(domain, delvc, pbvc, e_new, vnewc, bvc, p_new, rho0, TINY1, TINY3,   &
+!$OMP        ql, qq, p_old, q_old, pHalfStep, q_new, delvc, e_cut, emin)
     DO i = 0, length-1
       ielem = domain%m_regElemlist(i)
       SIXTH = (1.0_RLK) / (6.0_RLK)
@@ -2561,7 +2591,9 @@ CONTAINS
                               compression, vnewc, pmin, p_cut, &
                               eosvmax, length)
 
-!$OMP PARALLEL DO PRIVATE(i, ielem, ssc) DEFAULT(none) SHARED(domain, delvc, pbvc, e_new, vnewc, bvc, p_new, rho0, TINY1, TINY3, ql, qq, q_new, q_cut)
+!$OMP PARALLEL DO PRIVATE(i, ielem, ssc) DEFAULT(none)              &
+!$OMP SHARED(domain, delvc, pbvc, e_new, vnewc, bvc, p_new, rho0,   &
+!$OMP        TINY1, TINY3, ql, qq, q_new, q_cut)
     DO i = 0, length-1
       ielem = domain%m_regElemlist(i)
 
@@ -2608,7 +2640,8 @@ CONTAINS
     REAL(KIND=8) :: ssTmp
     INTEGER      :: i, ielem
 
-!$OMP PARALLEL DO PRIVATE(i, ielem, ssTmp) DEFAULT(none) SHARED(domain, pbvc, enewc, vnewc, bvc, pnewc, rho0, TINY1, TINY3)
+!$OMP PARALLEL DO PRIVATE(i, ielem, ssTmp) DEFAULT(none)    &
+!$OMP SHARED(domain, pbvc, enewc, vnewc, bvc, pnewc, rho0, TINY1, TINY3)
     DO i=0, numElem-1
       ielem = domain%m_regElemlist(i)
       ssTmp = (pbvc(i) * enewc(i)           &
@@ -2669,7 +2702,8 @@ CONTAINS
     ! Loop to add load imbalance based on region number
     DO j=0, rep-1
       ! compress data, minimal set
-!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none) SHARED(domain, e_old, delvc, p_old, q_old, qq, ql)
+!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none)    &
+!$OMP SHARED(domain, e_old, delvc, p_old, q_old, qq, ql)
       DO i = 0, length-1
         ielem = domaiN%m_regElemlist(i)
         e_old(i) = domain%m_e(ielem)
@@ -2680,7 +2714,8 @@ CONTAINS
         ql(i) = domain%m_ql(ielem)
       ENDDO
 
-!$OMP PARALLEL DO PRIVATE(i, ielem, vchalf) DEFAULT(none) SHARED(domain, compression, vnewc, delvc, compHalfStep)
+!$OMP PARALLEL DO PRIVATE(i, ielem, vchalf) DEFAULT(none)   &
+!$OMP SHARED(domain, compression, vnewc, delvc, compHalfStep)
       DO i = 0, length-1
         ielem = domain%m_regElemlist(i)
         compression(i) = (1.0_RLK) / vnewc(ielem) - (1.0_RLK)
@@ -2690,7 +2725,8 @@ CONTAINS
 
       ! Check for v > eosvmax or v < eosvmin
       IF ( eosvmin /= (0.0_RLK) ) THEN
-!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none) SHARED(domain, vnewc, eosvmin, compHalfStep, compression)
+!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none)   &
+!$OMP SHARED(domain, vnewc, eosvmin, compHalfStep, compression)
         DO i = 0, length-1
           ielem = domain%m_regElemlist(i)
           IF (vnewc(ielem) <= eosvmin) THEN  ! impossible due to calling func?
@@ -2699,7 +2735,8 @@ CONTAINS
         ENDDO
       ENDIF
       IF ( eosvmax /= (0.0_RLK) ) THEN
-!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none) SHARED(domain, vnewc, eosvmax, p_old, compression, compHalfStep)
+!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none)   &
+!$OMP SHARED(domain, vnewc, eosvmax, p_old, compression, compHalfStep)
         DO i = 0, length-1
           ielem = domain$m_regElemlist(i)
           IF (vnewc(ielem) >= eosvmax) THEN ! impossible due to calling func? 
@@ -2724,7 +2761,8 @@ CONTAINS
 
     ! Watch out: Scoping in C++ might produce weird errors here!!
 
-!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none) SHARED(domain, p_new, e_new, q_new)
+!$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none)   &
+!$OMP SHARED(domain, p_new, e_new, q_new)
     DO i = 0, length-1
       ielem = domain%m_regElemlist(i)
       domain%m_p(ielem) = p_new(i)
@@ -2803,7 +2841,8 @@ CONTAINS
       ! This check may not make perfect sense in LULESH, but
       ! it's representative of something in the full code -
       ! just leave it in, please
-!$OMP PARALLEL DO PRIVATE(i, vc) DEFAULT(none) SHARED(domain, eosvmin, eosvmax, VolumeError)
+!$OMP PARALLEL DO PRIVATE(i, vc) DEFAULT(none)   &
+!$OMP SHARED(domain, eosvmin, eosvmax, VolumeError)
       DO i = 0, length-1
         !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
         vc = domain%m_v(i)
@@ -2925,7 +2964,9 @@ CONTAINS
 
     qqc = domain%m_qqc
 
-!$OMP PARALLEL PRIVATE(qqc2, dtcoutran_tmp, courant_elem, thread_num, i, indx, dtf) DEFAULT(none) SHARED(domain, qqc, length, dtcourant_per_thread, courant_elem_per_thread)
+!$OMP PARALLEL PRIVATE(qqc2, dtcoutran_tmp, courant_elem, thread_num, i, indx, dtf)  &
+!$OMP DEFAULT(none) SHARED(domain, qqc, length, dtcourant_per_thread,                &
+!$OMP                      courant_elem_per_thread)
     qqc2 = (64.0_RLK) * qqc * qqc
 
     dtcourant_tmp = domain%m_dtcourant  ! TODO(Ludger): Does this need to be a pointer?
@@ -3011,7 +3052,8 @@ CONTAINS
     length = domain%m_numElem
 
     ! CALL __ENZYME_INTEGER(hydro_elem)
-!$OMP PARALLEL PRIVATE(dthydro_tmp, hydro_elem, thread_num, i, indx, dtdvov) DEFAULT(none) SHARED(domain, dvovmax, dthydro_per_thread, hydro_elem_per_thread)
+!$OMP PARALLEL PRIVATE(dthydro_tmp, hydro_elem, thread_num, i, indx, dtdvov)   &
+!$OMP DEFAULT(none) SHARED(domain, dvovmax, dthydro_per_thread, hydro_elem_per_thread)
     dthydro_tmp = domain%m_dthydro
     hydro_elem = -1
 
