@@ -1926,7 +1926,7 @@ CONTAINS
     numElem = domain%m_numElem
 
 !TODO(Ludger): Check Open-MP Statements below this point!
-!$OMP PARALLEL DO PRIVATE(i, ptiny, ax, ay, az, dxv, dyv, dzv, elemToNode, n0, n1, n2, n3, n4, n5, n6, n7, x0, x1, x2, x3, x4, x5, x6, x7, y0, y1, y2, y3, y4, y5, y6, y7, z0, z1, z2, z3, z4, z5, z6, z7, xv0, xv1, xv2, xv3, xv4, xv5, xv6, xv7, yv0, yv1, yv2, yv3, yv4, yv5, yv6, yv7, zv0, zv1, zv2, zv3, zv4, zv5, zv6, zv7, vol, norm, dxj, dyj, dzj, dxi, dyi, dzi, dxk, dyk, dzk) DEFAULT(none) SHARED(domain)
+!$OMP PARALLEL DO PRIVATE(i, ptiny, ax, ay, az, dxv, dyv, dzv, elemToNode, n0, n1, n2, n3, n4, n5, n6, n7, x0, x1, x2, x3, x4, x5, x6, x7, y0, y1, y2, y3, y4, y5, y6, y7, z0, z1, z2, z3, z4, z5, z6, z7, xv0, xv1, xv2, xv3, xv4, xv5, xv6, xv7, yv0, yv1, yv2, yv3, yv4, yv5, yv6, yv7, zv0, zv1, zv2, zv3, zv4, zv5, zv6, zv7, vol, norm, dxj, dyj, dzj, dxi, dyi, dzi, dxk, dyk, dzk) DEFAULT(none) SHARED(domain, ptiny)
     DO i=0, numElem-1
 
       elemToNode => domain%m_nodelist(i, :)
@@ -2128,7 +2128,7 @@ CONTAINS
     INTEGER, PARAMETER :: ZETA_P_FREE = z'800' ! 0x800
 
 
-!$OMP PARALLEL DO PRIVATE(i, ielem, qlin, qquad, phixi, phieta, phizeta, bcMask, delvm, norm, delvxxi, delvxeta, delvxzeta, rho) DEFAULT(none) SHARED(domain)
+!$OMP PARALLEL DO PRIVATE(i, ielem, qlin, qquad, phixi, phieta, phizeta, bcMask, delvm, norm, delvxxi, delvxeta, delvxzeta, rho) DEFAULT(none) SHARED(domain, ptiny, XI_M, XI_M_SYMM, XI_M_FREE, XI_P, XI_P_COMM, XI_P_SYMM, XI_P_FREE, monoq_limiter_mult, monoq_max_slope, ETA_M, ETA_M_COMM, ETA_M_SYMM, ETA_M_FREE, ETA_P, ETA_P_COMM, ETA_P_SYMM, ETA_P_FREE, ZETA_M, ZETA_M_SYMM, ZETA_M_FREE, ZETA_P, ZETA_P_COMM, ZETA_P_SYMM, ZETA_P_FREE)
     DO i=0, domain%m_regElemSize(r)-1
       ielem = domain%m_regElemlist(r, i)  !-> What does the r here do?
       !ielem = domain%m_regElemlist(i)
@@ -2465,7 +2465,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: pHalfStep
     REAL(KIND=8), PARAMETER :: TINY1 = 0.111111e-36_RLK
     REAL(KIND=8), PARAMETER :: TINY3 = 0.333333e-18_RLK
-    REAL(KIND=8), PARAMETER :: SIXTH = (1.0_RLK) / (6.0_RLK)
+    REAL(KIND=8), PARAMETER :: SIXTH
 
 
     ALLOCATE(pHalfStep(0:length-1))
@@ -2484,12 +2484,11 @@ CONTAINS
                               compHalfStep, vnewc, pmin, p_cut,    &
                               eosvmax, length)
 
-!$OMP PARALLEL DO PRIVATE(i, vhalf, ssc) DEFAULT(none) SHARED(compHalfStep, delvc, q_new, pbvc, e_new, vhalf, bvc, pHalfStep, rho0, ql_old, qq_old, p_old, q_old)
+!$OMP PARALLEL DO PRIVATE(i, vhalf, ssc) DEFAULT(none) SHARED(compHalfStep, delvc, q_new, pbvc, e_new, vhalf, bvc, pHalfStep, rho0, ql, qq, p_old, q_old, TINY1, TINY3)
     DO i = 0, length-1
       vhalf = (1.0_RLK) / ((1.0_RLK) + compHalfStep(i))
 
       IF ( delvc(i) > (0.0_RLK) ) THEN
-        ! q_new(i) /* = qq(i) = ql(i) */ = Real_t(0.) ;
         q_new(i) = (0.0_RLK)
       ELSE
         ssc = (pbvc(i) * e_new(i) +   &
@@ -2525,9 +2524,10 @@ CONTAINS
                               compression, vnewc, pmin, p_cut, &
                               eosvmax, length)
 
-!$OMP PARALLEL DO PRIVATE(i, sixth, ielem, q_tilde, ssc) DEFAULT(none) SHARED(domain, pbvc, e_new, vnewc, bvc, p_new, rho0, ql, qq, p_old, q_old, pHalfStep, q_new, delvc, e_cut, emin)
+!$OMP PARALLEL DO PRIVATE(i, sixth, ielem, q_tilde, ssc) DEFAULT(none) SHARED(domain, delvc, pbvc, e_new, vnewc, bvc, p_new, rho0, TINY1, TINY3, ql, qq, p_old, q_old, pHalfStep, q_new, delvc, e_cut, emin)
     DO i = 0, length-1
       ielem = domain%m_regElemlist(i)
+      SIXTH = (1.0_RLK) / (6.0_RLK)
 
       IF (delvc(i) > (0.0_RLK)) THEN
         q_tilde = (0.0_RLK)
@@ -2715,6 +2715,7 @@ CONTAINS
         work(i) = (0.0_RLK)
       ENDDO
     ENDDO
+
     CALL CalcEnergyForElems(domain, p_new, e_new, q_new, bvc, pbvc,  &
                             p_old, e_old,  q_old, compression,       &
                             compHalfStep, vnewc, work,  delvc, pmin, &
@@ -2802,7 +2803,7 @@ CONTAINS
       ! This check may not make perfect sense in LULESH, but
       ! it's representative of something in the full code -
       ! just leave it in, please
-!$OMP PARALLEL DO PRIVATE(i, vc) DEFAULT(none) SHARED(domain, eosvmin, eosvmax)
+!$OMP PARALLEL DO PRIVATE(i, vc) DEFAULT(none) SHARED(domain, eosvmin, eosvmax, VolumeError)
       DO i = 0, length-1
         !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
         vc = domain%m_v(i)
@@ -2924,7 +2925,7 @@ CONTAINS
 
     qqc = domain%m_qqc
 
-!$OMP PARALLEL PRIVATE(qqc2, dtcoutran_tmp, courant_elem, thread_num, i, indx, dtf) DEFAULT(none) SHARED(domain, qqc, qqc2, dtcourant_per_thread, courant_elem_per_thread)
+!$OMP PARALLEL PRIVATE(qqc2, dtcoutran_tmp, courant_elem, thread_num, i, indx, dtf) DEFAULT(none) SHARED(domain, qqc, length, dtcourant_per_thread, courant_elem_per_thread)
     qqc2 = (64.0_RLK) * qqc * qqc
 
     dtcourant_tmp = domain%m_dtcourant  ! TODO(Ludger): Does this need to be a pointer?
@@ -3124,11 +3125,6 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:7) :: x, y, z
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8)  :: volume=0.0_RLK
-
-  !!$REAL(KIND=8)  :: x0, x1, x2, x3, x4, x5, x6, x7
-  !!$REAL(KIND=8)  :: y0, y1, y2, y3, y4, y5, y6, y7
-  !!$REAL(KIND=8)  :: z0, z1, z2, z3, z4, z5, z6, z7
-
     REAL(KIND=8) :: twelveth = (1.0_RLK)/(12.0_RLK)
 
     REAL(KIND=8) :: dx61
