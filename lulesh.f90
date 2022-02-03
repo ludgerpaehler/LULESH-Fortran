@@ -100,6 +100,9 @@ TYPE(domain_type) :: domain
 !TYPE(domain_type) :: grad_domain  ! Datastruct to store the gradients in  - deactivated for the debugging of the primal
 INTEGER :: edgeElems 
 INTEGER :: edgeNodes
+INTEGER :: opts_its, opts_nx, opts_numReg, opts_showProg,   &
+           opts_quiet, opts_viz, opts_balance, opts_cost
+REAL(KIND=8) :: opts_numFiles
 REAL(KIND=8) :: tx, ty, tz 
 INTEGER :: nidx, zidx
 INTEGER :: col, row, plane, side
@@ -165,25 +168,55 @@ numRanks  = 1   ! Serial execution for now.
 myRank    = 0   ! Rank of the executor
 
 
-! get run options to measure various metrics 
+! Options as set in the C++ code
+! Set defaults that can be overridden by command line args
+opts_its      = 9999999
+opts_nx       = edgeElems
+opts_numReg   = 11
+opts_numFiles = (numRanks+10)/9
+opts_showProg = 0
+opts_quiet    = 0
+opts_viz      = 0
+opts_balance  = 1
+opts_cost     = 1
 
-!****************************
-!*   Initialize Sedov Mesh  *
-!****************************
+
+! Into the domain construction goes:
+!  - numRanks
+!  - col
+!  - row
+!  - plane
+!  - opts_nx
+!  - side
+!  - opts_numReg
+!  - opts_balance
+!  - opts_cost
+! C++ call: Domain(numRanks, col, row, plane, opts.nx, side, opts.numReg, opts.balance, opts.cost) ;
+
 
 ! Set up the mesh and decompose. Assumes regular cubes
 CALL InitMeshDecomp(numRanks, myRank, col, row, plane, side)
 
-! ----------------------------------
-!   Build the main data structure
-! ----------------------------------
 
-Domain(numRanks, col, row, plane, opts.nx,
-                       side, opts.numReg, opts.balance, opts.cost) ;
-! numRanks = 1 i.e. serial execution
-! col, row, plane, side come out of the InitMeshDecomp
-! opts.nx  should be 30
-! 
+! -----------------------------------------------------
+!   Begin the construction of the main data structure
+!     and initialize it
+! -----------------------------------------------------
+
+! To follow the C++ construction:
+edgeElems = opts_nx
+edgeNodes = edgeElems+1
+
+! TODO(Ludger & Jan): What is this?!
+!this->cost() = cost;
+
+! Store information in the domain
+domain%m_tp = tp
+domain%m_numRanks = numRanks
+
+! --------------------------------
+! Initialize Sedov mesh
+! --------------------------------
 
 ! Construct a uniform box for the domain
 domain%m_sizeX   = edgeElems 
@@ -192,60 +225,72 @@ domain%m_sizeZ   = edgeElems
 domain%m_numElem = edgeElems*edgeElems*edgeElems 
 domain%m_numNode = edgeNodes*edgeNodes*edgeNodes 
 
-domElems = domain%m_numElem
-!PRINT *, "domElems of Domain are: ", domElems
-
-! Construct a uniform box for the gradient domain  - deactivated for debugging of the primal
-!grad_domain%m_sizeX   = edgeElems
-!grad_domain%m_sizeY   = edgeElems
-!grad_domain%m_sizeZ   = edgeElems
-!grad_domain%m_numElem = edgeElems*edgeElems*edgeElems
-!grad_domain%m_numNode = edgeNodes*edgeNodes*edgeNodes
-
-!grad_domElems = grad_domain%m_numElem
-!PRINT *, "grad_domElems of Gradient Domain are: ", grad_domElems
-
 !m_regNumList = new Index_t[numElem()]; // material indexset in C++
+ALLOCATE(domain%m_regNumList(0:numElem-1))
 
-! allocate field memory for the domain
+! Elem-centered
 CALL AllocateElemPersistent(domain, domain%m_numElem)
 CALL AllocateElemTemporary (domain, domain%m_numElem) 
 
+! Node-centered
 CALL AllocateNodalPersistent(domain, domain%m_numNode) 
 CALL AllocateNodesets(domain, edgeNodes*edgeNodes)
 
-! Allocate field memory for the grad domain  - deactivated for debugging of the primal
-!CALL AllocateElemPersistent(grad_domain, domain%m_numElem)
-!CALL AllocateElemTemporary (grad_domain, domain%m_numElem) 
 
-!CALL AllocateNodalPersistent(grad_domain, domain%m_numNode) 
-!CALL AllocateNodesets(grad_domain, edgeNodes*edgeNodes)
+! Basic Field Initialization
+DO i=0, numElem-1
+   e(i) = 0.0_RLK
+   p(i) = 0.0_RLK
+   q(i) = 0.0_RLK
+   ss(i) = 0.0_RLK
+END DO
 
-! initialize nodal coordinates 
+! v initialized to 1.0
+DO i=0, numElem-1
+   v(i) = 1.0_RLK
+END DO
+
+DO i=0, numNode-1
+   xd(i) = 0.0_RLK
+   yd(i) = 0.0_RLK
+   zd(i) = 0.0_RLK
+END DO
+
+DO i=0, numNode-1
+   xdd(i) = 0.0_RLK
+   ydd(i) = 0.0_RLK
+   zdd(i) = 0.0_RLK
+END DO
+
+DO i=0, numNode-1
+   nodalMass(i) = 0.0_RLK
+END DO
+
+! Domain :: BuildMesh
+meshEdgeElems = m_tp * opts_nx
+
 nidx = 0
-tz = 0.0_RLK
+tz = 1.125_RLK * (domain%m_planeLoc*opts_nx) / meshEdgeElems  ! What is domain%m_planeLoc?
 
 DO plane=0, edgeNodes-1
-   ty = 0.0_RLK
+   ty = 1.125_RLK * (domain%m_rowLoc*opts_nx) / meshEdgeElems
    DO row=0, edgeNodes-1
-      tx = 0.0_RLK
+      tx = 1.125_RLK * (domain%m_colLoc*opts_nx) / meshEdgeElems
       DO col=0, edgeNodes-1
          ! Initialize nodal coordinates for the domain
          domain%m_x(nidx) = tx
          domain%m_y(nidx) = ty
          domain%m_z(nidx) = tz
-         
-         ! Initialize nodal coordinates for the gradient domain  - deactivated for debugging of the primal.
-         !grad_domain%m_x(nidx) = tx
-         !grad_domain%m_y(nidx) = ty
-         !grad_domain%m_z(nidx) = tz
-         
+
          nidx = nidx+1
-         tx = (1.125_RLK*REAL((col+1),8))/REAL(edgeElems,8)
+         tx = 1.125_RLK * (domain%m_colLoc*opts_nx + col+1) / meshEdgeElems
+         !tx = (1.125_RLK*REAL((col+1),8))/REAL(edgeElems,8)
       END DO
-      ty = 1.125_RLK*REAL((row+1),8)/REAL(edgeElems,8)
+      ty = 1.125_RLK * (domain%m_rowLoc*opts_nx + row+1) / meshEdgeElems
+      !ty = 1.125_RLK*REAL((row+1),8)/REAL(edgeElems,8)
    END DO
-   tz = 1.125_RLK*REAL((plane+1),8)/REAL(edgeElems,8)
+   tz = 1.125_RLK * (domain%m_planeLoc*opts_nx + plane+1) / meshEdgeElems
+   !tz = 1.125_RLK*REAL((plane+1),8)/REAL(edgeElems,8)
 END DO
 
 ! embed hexehedral elements in nodal point lattice
@@ -256,15 +301,14 @@ DO plane=0, edgeElems-1
    DO row=0, edgeElems-1
       DO col=0, edgeElems-1
          localNode => domain%m_nodelist(zidx*8:)
-         ! Fortran pointer index starts from 1
-         localNode(1) = nidx
-         localNode(2) = nidx                                   + 1
-         localNode(3) = nidx                       + edgeNodes + 1
-         localNode(4) = nidx                       + edgeNodes
-         localNode(5) = nidx + edgeNodes*edgeNodes
-         localNode(6) = nidx + edgeNodes*edgeNodes             + 1
-         localNode(7) = nidx + edgeNodes*edgeNodes + edgeNodes + 1
-         localNode(8) = nidx + edgeNodes*edgeNodes + edgeNodes
+         localNode(0) = nidx
+         localNode(1) = nidx                                   + 1
+         localNode(2) = nidx                       + edgeNodes + 1
+         localNode(3) = nidx                       + edgeNodes
+         localNode(4) = nidx + edgeNodes*edgeNodes
+         localNode(5) = nidx + edgeNodes*edgeNodes             + 1
+         localNode(6) = nidx + edgeNodes*edgeNodes + edgeNodes + 1
+         localNode(7) = nidx + edgeNodes*edgeNodes + edgeNodes
          zidx = zidx + 1
          nidx = nidx + 1
       END DO
@@ -275,8 +319,81 @@ END DO
 
 NULLIFY(localNode)
 
+#if _OPENMP
+! Setup the thread support structures
+numthreads = OMP_GET_MAX_THREADS()
+
+IF (numthreads > 1) THEN
+   ALLOCATE(nodeElemCount(0:domain%m_numNode-1))
+
+   DO i=0, domain%m_numNode-1
+      nodeElemCount(i) = 0
+   END DO
+
+   DO i=0, domain%m_numElem-1
+      nl => domain%m_nodelist(i*8)
+      DO j=0, 7
+         nodeElemCount(nl(j)) = nodeElemCount(nl(j)) + 1
+      END DO
+   END DO
+ENDIF
+
+ALLOCATE(nodeElemStart(0:domain%m_numNode-1))
+nodeElemStart(0) = 0
+
+DO i=1, domain%m_numNode
+   nodeElemStart(i) = nodeElemStart(i-1) + nodeElemCount(i-1)
+END DO
+
+! TODO(Jan & Ludger): Double-check this!!
+ALLOCATE(nodeElemCornerList(0:nodeElemStart(domain%m_numNode)-1))
+
+DO i=0, domain%m_numNode-1
+   nodeElemCount(i) = 0
+END DO
+
+DO i=0, numElem-1
+   nl => domain%m_nodelist(i*8)
+   DO j=0, 7
+      m = nl(j)
+      k = i*8 + j
+      offset = nodeElemStart(m) + nodeElemCount(m)
+      nodeElemCornerList(offset) = k
+      nodeElemCount(m) = nodeElemCount(m) + 1
+   END DO
+END DO
+
+clSize = nodeElemStart(domain%m_numNode)
+DO i=0, clSize-1
+   clv = nodeElemCornerList(i)
+   IF ((clv.LT.0).OR.(clv.GT.numElem*8))THEN
+      PRINT*, "ERROR: clv = ", clv
+      PRINT*, "ERROR: clv.LT.0 = ", (clv.LT.0)
+      PRINT*, "ERROR: numElem*8 = ", numElem*8
+      PRINT*, "ERROR: clv.GT.numElem*8 = ", (clv.GT.numElem*8)
+      PRINT*,"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"
+      CALL luabort(1)
+   END IF
+END DO
+
+NULLIFY(nodeElemCount)
+
+#endif
+
+! CreateRegionIndexSets(nr, balance)
+! Inputs in our case: opts_numReg, opts_balance
+
+! Setup region index sets. For now, these are constant sized
+! throughout the run, but could be changed every cycle to
+! simulate effects of ALE on the Lagrange solver
+srand(0)n  ! TODO(Jan & Ludger): What is this in FORTRAN land?
+
+
+
+
+
+
 CALL AllocateNodeElemIndexes(domain)
-!CALL AllocateNodeElemIndexes(grad_domain)  - deactivated for debugging of the primal
 
 !Create a material IndexSet (entire domain same material for now)
 DO i=0, domElems-1
