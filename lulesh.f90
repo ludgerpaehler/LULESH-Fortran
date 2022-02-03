@@ -174,9 +174,16 @@ myRank    = 0   ! Rank of the executor
 ! Set up the mesh and decompose. Assumes regular cubes
 CALL InitMeshDecomp(numRanks, myRank, col, row, plane, side)
 
+! ----------------------------------
+!   Build the main data structure
+! ----------------------------------
 
-! Everything below this point is the domain initialization!
-
+Domain(numRanks, col, row, plane, opts.nx,
+                       side, opts.numReg, opts.balance, opts.cost) ;
+! numRanks = 1 i.e. serial execution
+! col, row, plane, side come out of the InitMeshDecomp
+! opts.nx  should be 30
+! 
 
 ! Construct a uniform box for the domain
 domain%m_sizeX   = edgeElems 

@@ -2158,7 +2158,7 @@ CONTAINS
 !$OMP                      ZETA_M, ZETA_M_SYMM, ZETA_M_FREE, ZETA_P, ZETA_P_COMM,  &
 !$OMP                      ZETA_P_SYMM, ZETA_P_FREE)
     DO i=0, domain%m_regElemSize(r)-1
-      ielem = domain%m_regElemlist(r, i)  !-> What does the r here do?
+      ielem = domain%m_regElemlist(r, i)  !-> What does the r here do? -> Do we want the regions to be in here?
       !ielem = domain%m_regElemlist(i)
       bcMask = domain%m_elemBC(ielem)
 
