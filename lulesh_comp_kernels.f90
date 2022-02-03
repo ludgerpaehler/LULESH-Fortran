@@ -1422,7 +1422,7 @@ CONTAINS
     
     ! start loop over elements
 !$OMP PARALLEL DO PRIVATE(i, x1, y1, z1, pfx, pfy, pfz, elemToNode, ii, jj)  &
-!$OMP DEFAULT(none) SHARED(domain, determ)
+!$OMP DEFAULT(none) SHARED(domain, determ, numElem)
     DO i=0, numElem-1
       ! Index_t* elemToNode = domain.nodelist(i);
       elemToNode => domain%m_nodelist(i)
