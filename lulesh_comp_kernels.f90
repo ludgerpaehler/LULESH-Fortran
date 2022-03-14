@@ -38,14 +38,13 @@ PRIVATE
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_symmX   ! symmetry plane nodesets - m_symmX[idx]
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_symmY 
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_symmZ
-    ! Missing the following syntax which is existent in the CPP version
-    ! bool symmXempty()  {return m_symmX.empty();}
-
+    LOGICAL ::m_symm_is_set
 
     ! Missing region information
     INTEGER,     DIMENSIOn(:), ALLOCATABLE ::m_regElemSize   ! Size of region sets
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_regNumList    ! Region number per domain element
-    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_regElemlist   ! Region indexset  - see notes on call with Jan 
+    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_regElemlist   ! Region indexset
+    INTEGER,     DIMENSION(:), ALLOCATABLE ::m_regElemKeys   ! Keys to the slices of the region indexset
   
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_nodeElemCount 
     INTEGER,     DIMENSION(:), ALLOCATABLE ::m_nodeElemStart 
@@ -55,7 +54,7 @@ PRIVATE
     ! Element-centered 
   
     INTEGER,     DIMENSION(:), ALLOCATABLE :: m_matElemlist   ! material indexset 
-    INTEGER,     DIMENSION(:,:), POINTER   :: m_nodelist => NULL()  ! elemToNode connectivity 
+    INTEGER,     DIMENSION(:,:), POINTER   :: m_nodelist  ! elemToNode connectivity 
   
     INTEGER,     DIMENSION(:), ALLOCATABLE :: m_lxim   ! element connectivity across each face 
     INTEGER,     DIMENSION(:), ALLOCATABLE :: m_lxip 
@@ -352,15 +351,15 @@ CONTAINS
 
 
   ! Really unsure about this one here!
-  SUBROUTINE AllocateNodesets(domain, numElem)
+  SUBROUTINE AllocateNodesets(domain, edgeNodes_sq)
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    INTEGER :: numElem
+    INTEGER :: edgeNodes_sq
 
-    ALLOCATE(domain%m_symmX(0:numElem-1))
-    ALLOCATE(domain%m_symmY(0:numElem-1))
-    ALLOCATE(domain%m_symmZ(0:numElem-1))
+    ALLOCATE(domain%m_symmX(0:edgeNodes_sq-1))
+    ALLOCATE(domain%m_symmY(0:edgeNodes_sq-1))
+    ALLOCATE(domain%m_symmZ(0:edgeNodes_sq-1))
 
   END SUBROUTINE AllocateNodesets
 
@@ -370,11 +369,11 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    INTEGER :: m
+    INTEGER :: numElem 
+    INTEGER, DIMENSION(0:7) :: m
     INTEGER :: i,j,k
     INTEGER :: offset
     INTEGER :: clSize, clv
-    INTEGER :: numElem 
     INTEGER :: numNode
     INTEGER :: nodelist_len
 
@@ -390,9 +389,9 @@ CONTAINS
 
     domain%m_nodeElemCount=0
 
-    DO i=0, SIZE(domain%m_nodelist)-1  
-       domain%m_nodeElemCount(domain%m_nodelist(i))=   &
-            domain%m_nodeElemCount(domain%m_nodelist(i))+1
+    DO i=0, SIZE(domain%m_nodelist, 2)-1  ! Only take the size along the 2nd axis
+       domain%m_nodeElemCount(domain%m_nodelist(i, :))=   &
+            domain%m_nodeElemCount(domain%m_nodelist(i, :))+1
     END DO
 
     ALLOCATE(domain%m_nodeElemStart(0:numNode-1))  
@@ -403,17 +402,14 @@ CONTAINS
        domain%m_nodeElemStart(i) = domain%m_nodeElemStart(i-1) + domain%m_nodeElemCount(i-1)
     END DO
 
-    ! This needs to be initialized as an array!!  <- Error in here right now!
+    ! This needs to be initialized as a 2-dimensional array!!  <- Error in here right now!
     ALLOCATE(domain%m_nodeElemCornerList(0:(domain%m_nodeElemStart(numNode-1) +  &
                                             domain%m_nodeElemCount(numNode-1))))
 
     domain%m_nodeElemCount=0  
 
-
-    !CHECK THIS LOOP - THINK IT'S OK ????
-
     DO i=0, SIZE(domain%m_nodelist)-1
-          m=domain%m_nodelist(i)
+          m=domain%m_nodelist(i, :) ! m is broken right now, what does it actually need to look like?
           offset = domain%m_nodeElemStart(m)+domain%m_nodeElemCount(m)
           domain%m_nodeElemCornerList(offset) = i
           domain%m_nodeElemCount(m) = domain%m_nodeElemCount(m) + 1
@@ -437,7 +433,7 @@ CONTAINS
   END SUBROUTINE AllocateNodeElemIndexes
 
 
-  SUBROUTINE InitMeshDecomp(numRanks, myRank, col, row, plane, side) RETURN(col, row, plane, side)
+  SUBROUTINE InitMeshDecomp(numRanks, myRank, col, row, plane, side)
     IMPLICIT NONE
 
     INTEGER, INTENT(IN) :: numRanks
@@ -451,11 +447,12 @@ CONTAINS
     INTEGER(KIND=4) :: dx, dy, dz
     INTEGER(KIND=4) :: myDom
     INTEGER(KIND=4) :: remainder
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
 
     ! Assume cube processor layout for now
-    testProcs   = NINT(CBRT(numRanks)+0.5_RLK)
+    testProcs = NINT((numRanks**(1.0_RLK/3.0_RLK))+0.5_RLK)
     IF (testProcs*testProcs*testProcs /= numRanks) THEN
-      EXIT
+      STOP
     ENDIF
 
     dx = testProcs
@@ -816,20 +813,23 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:), INTENT(INOUT) :: determ
     INTEGER(KIND=4), PARAMETER :: RLK = 8
 
-    REAL(KIND=8) :: fx_local, fy_local, fz_local, fx_tmp, fy_tmp, fz_tmp
-    REAL(KIND=8) :: x_local, y_local, z_local
-    REAL(KIND=8), DIMENSION(:),ALLOCATABLE :: fx_elem, fy_elem, fz_elem
+    REAL(KIND=8) :: fx_tmp, fy_tmp, fz_tmp
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: fx_local, fy_local, fz_local
+    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: fx_elem, fy_elem, fz_elem
     REAL(KIND=8), DIMENSION(0:7,0:2) :: B   ! shape function derivatives
     REAL(KIND=8), DIMENSION(0:7)   :: x_local
     REAL(KIND=8), DIMENSION(0:7)   :: y_local
     REAL(KIND=8), DIMENSION(0:7)   :: z_local
-    INTEGER(KIND=4), DIMENSION(:), POINTER :: elemNodes => NULL()
+    INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode
     INTEGER      :: lnode, gnode, count, ielem, kk
-    INTEGER      :: numNode = domain%m_numNode
-    INTEGER, DIMENSION(0:numNode-1) :: cornerList
-    INTEGER      :: numElem8 = numElem * 8
+    INTEGER      :: numNode
+    INTEGER, DIMENSION(:), POINTER :: cornerList
+    INTEGER      :: numElem8
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4) :: numthreads
+
+    numNode = domain%m_numNode
+    numElem8 = numElem * 8
 
 #if _OPENMP
       numthreads = OMP_GET_MAX_THREADS()
@@ -885,7 +885,7 @@ CONTAINS
 !$OMP DEFAULT(none) SHARED(domain, fx_elem, fy_elem, fz_elem)
       DO gnode=0, numNode-1
         count = domain%m_nodeElemCount(gnode)
-        cornerList = domain%m_nodeElemCornerList(gnode, :)
+        cornerList => domain%m_nodeElemCornerList(gnode, :)
         fx_tmp = 0.0_RLK
         fy_tmp = 0.0_RLK
         fz_tmp = 0.0_RLK
@@ -1121,7 +1121,7 @@ CONTAINS
 
     REAL(KIND=8) :: coefficient, volinv, ss1, mass1, volume13
     REAL(KIND=8) :: hourmodx, hourmody, hourmodz
-    REAL(KIND=8) :: fx_tmp, fy_tmp, fz_tmp = 0.0_RLK
+    REAL(KIND=8) :: fx_tmp, fy_tmp, fz_tmp
     REAL(KIND=8), DIMENSION(0:7) :: hgfx, hgfy, hgfz
     REAL(KIND=8), DIMENSION(0:7) :: xd1, yd1, zd1
     REAL(KIND=8), DIMENSION(0:3, 0:7) :: hourgam
@@ -1129,11 +1129,17 @@ CONTAINS
     REAL(KIND=8), DIMENSION(:), POINTER :: fx_elem, fy_elem, fz_elem
     REAL(KIND=8), DIMENSION(:), POINTER :: fx_local, fy_local, fz_local
     INTEGER(KIND=4) :: numElem, numElem8, i, i2, i3, i1
-    INTEGER(KIND=4) :: numNode = domain%m_numNode
+    INTEGER(KIND=4) :: numNode, ielem
     INTEGER(KIND=4) :: gnode, elem, count, start
     INTEGER(KIND=4) :: n0si2, n1si2, n2si2, n3si2, n4si2, n5si2, n6si2, n7si2
-    INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode => NULL()
+    INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode
     INTEGER :: numthreads
+    INTEGER, DIMENSION(:), POINTER :: cornerList
+
+    fx_tmp = 0.0_RLK
+    fy_tmp = 0.0_RLK
+    fz_tmp = 0.0_RLK
+    numNode = domain%m_numNode
 
 #if _OPENMP
       numthreads = OMP_GET_MAX_THREADS()
@@ -1367,12 +1373,12 @@ CONTAINS
 !$OMP DEFAULT(none) SHARED(domain, fx_elem, fy_elem, fz_elem)
       DO gnode=0, numNode-1
         count = domain%m_nodeElemCount(gnode)
-        cornerList = domain%m_nodeElemCornerList(gnode,:)
+        cornerList => domain%m_nodeElemCornerList(gnode,:)
         DO i=0, count-1
           ielem = cornerList(i)
-          fx_tmp = fx_tmp + fx_elem[ielem]
-          fy_tmp = fy_tmp + fy_elem[ielem]
-          fz_tmp = fz_tmp + fz_elem[ielem]
+          fx_tmp = fx_tmp + fx_elem(ielem)
+          fy_tmp = fy_tmp + fy_elem(ielem)
+          fz_tmp = fz_tmp + fz_elem(ielem)
         ENDDO
         domain%m_fx(gnode) = domain%m_fx(gnode) + fx_tmp
         domain%m_fy(gnode) = domain%m_fy(gnode) + fy_tmp
@@ -1409,7 +1415,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(0:7) :: x1, y1, z1
     REAL(KIND=8), DIMENSION(0:7) :: pfx, pfy, pfz
     INTEGER(KIND=4) :: numElem, numElem8, i, ii, jj
-    INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode => NULL()
+    INTEGER(KIND=4), DIMENSION(:), POINTER :: elemToNode
 
     numElem = domain%m_numElem
     numElem8 = numElem * 8
@@ -1425,7 +1431,7 @@ CONTAINS
 !$OMP DEFAULT(none) SHARED(domain, determ, numElem)
     DO i=0, numElem-1
       ! Index_t* elemToNode = domain.nodelist(i);
-      elemToNode => domain%m_nodelist(i)
+      elemToNode => domain%m_nodelist(i, :)
       CALL CollectDomainNodesToElemNodes(domain, elemToNode, x1, y1, z1)
       
       CALL CalcElemVolumeDerivative(pfx, pfy, pfz, x1, y1, z1)
@@ -1524,9 +1530,11 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    INTEGER(KIND=4) :: numNode = domain%m_numNode
+    INTEGER(KIND=4) :: numNode
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4), PARAMETER :: RLK = 8
+
+    numNode = domain%m_numNode
 
 !$OMP PARALLEL DO PRIVATE(i) DEFAULT(none) SHARED(domain)
     DO i=0, numNode-1
@@ -1545,8 +1553,10 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    INTEGER(KIND=4) :: numNode = domain%m_numNode
+    INTEGER(KIND=4) :: numNode
     INTEGER(KIND=4) :: i
+
+    numNode = domain%m_numNode
 
 !  !$OMP PARALLEL DO PRIVATE(i) DEFAULT(none) SHARED(domain)
     DO i=0, numNode-1
@@ -1570,25 +1580,13 @@ CONTAINS
 
     numNodeBC = (domain%m_sizeX+1)*(domain%m_sizeX+1)
 
-    IF (domain%m_symmXempty() /= 0) THEN  ! Check if m_symmXempty() exists?
+    IF (domain%m_symm_is_set) THEN
 !$OMP PARALLEL DO PRIVATE(i) DEFAULT(none) SHARED(domain)
       DO i=0, numNodeBC-1
         domain%m_xdd(domain%m_symmX(i)) = 0.0_RLK
-      ENDDO
-    ENDIF
-
-    IF (domain%m_symmYempty() /= 0) THEN  ! Check if m_symmYempty() exists?
-!$OMP PARALLEL DO PRIVATE(i) DEFAULT(none) SHARED(domain)
-      DO i=0, numNodeBC-1
         domain%m_ydd(domain%m_symmY(i)) = 0.0_RLK
-      ENDDO
-    ENDIF
-
-    IF (domain%m_symmZempty() /= 0) THEN  ! Check if m_symmZempty() exists?
-!$OMP PARALLEL DO PRIVATE(i) DEFAULT(none) SHARED(domain)
-      DO i=0, numNodeBC-1
         domain%m_zdd(domain%m_symmZ(i)) = 0.0_RLK
-      ENDDO
+      END DO
     ENDIF
 
   END SUBROUTINE ApplyAccelerationBoundaryConditionsForNodes
@@ -1599,10 +1597,12 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8)    :: dt, u_cut
-    INTEGER(KIND=4) :: numNode = domain%m_numNode
+    INTEGER(KIND=4) :: numNode
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     REAL(KIND=8)    :: xdtmp, ydtmp, zdtmp
+
+    numNode = domain%m_numNode
 
 
 !$OMP PARALLEL DO PRIVATE(i, xdtmp, ydtmp, zdtmp) DEFAULT(none)   &
@@ -1637,8 +1637,10 @@ CONTAINS
 
     TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8)    :: dt
-    INTEGER(KIND=4) :: numNode = domain%m_numNode
+    INTEGER(KIND=4) :: numNode
     INTEGER(KIND=4) :: i
+
+    numNode = domain%m_numNode
 
 !$OMP PARALLEL DO PRIVATE(i) DEFAULT(none) SHARED(domain, dt)
     DO i = 0, numNode-1
@@ -1655,8 +1657,11 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    REAL(KIND=8) :: delt = domain%m_deltatime
-    REAL(KIND=8) :: u_cut = domain%m_u_cut
+    REAL(KIND=8) :: delt
+    REAL(KIND=8) :: u_cut
+
+    delt = domain%m_deltatime
+    u_cut = domain%m_u_cut
 
     ! Time of boundary condition evaluation is beginning of
     ! step for force and acceleration boundary conditions.
@@ -1874,7 +1879,7 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    REAL(KIND=8)    :: deltatime = domain%m_deltatime
+    REAL(KIND=8)    :: deltatime
     REAL(KIND=8)    :: vdov, vdovthird
     INTEGER(KIND=4) :: numElem, k
 
@@ -1882,13 +1887,15 @@ CONTAINS
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     INTEGER(KIND=4), PARAMETER :: VolumeError = -1
 
+    deltatime = domain%m_deltatime
+
     numElem = domain%m_numElem
     IF (numElem > 0) THEN
       deltatime = domain%m_deltatime
 
       CALL AllocateStrains(domain, numElem)
 
-      CALL CalcKinematicsForElems(domain, numElem, deltatime)
+      CALL CalcKinematicsForElems(domain, deltatime, numElem)
 
       ! Element loop to do some stuff not included in the elemlib function.
 !$OMP PARALLEL DO PRIVATE(k, vdov, vdovthird) DEFAULT(none) SHARED(domain)
@@ -2118,35 +2125,35 @@ CONTAINS
     REAL(KIND=8) :: qlin, qquad, phixi, phieta, phizeta, delvm, delvp
     REAL(KIND=8) :: norm, delvxxi, delvxeta, delvxzeta, rho
 
+    ! Hacky introduction of the necessary information for the boundary conditions
+    INTEGER, PARAMETER :: XI_M        = int(z'003',kind=rlk) ! 0x003
+    INTEGER, PARAMETER :: XI_M_SYMM   = int(z'001', kind=rlk) ! 0x001
+    INTEGER, PARAMETER :: XI_M_FREE   = int(z'002', kind=rlk) ! 0x002
+
+    INTEGER, PARAMETER :: XI_P        = int(z'00c', kind=rlk) ! 0x00c
+    INTEGER, PARAMETER :: XI_P_SYMM   = int(z'004', kind=rlk) ! 0x004
+    INTEGER, PARAMETER :: XI_P_FREE   = int(z'008', kind=rlk) ! 0x008
+
+    INTEGER, PARAMETER :: ETA_M       = int(z'030', kind=rlk) ! 0x030
+    INTEGER, PARAMETER :: ETA_M_SYMM  = int(z'010', kind=rlk) ! 0x010
+    INTEGER, PARAMETER :: ETA_M_FREE  = int(z'020', kind=rlk) ! 0x020
+
+    INTEGER, PARAMETER :: ETA_P       = int(z'0c0', kind=rlk) ! 0x0c0
+    INTEGER, PARAMETER :: ETA_P_SYMM  = int(z'040', kind=rlk) ! 0x040
+    INTEGER, PARAMETER :: ETA_P_FREE  = int(z'080', kind=rlk) ! 0x080
+
+    INTEGER, PARAMETER :: ZETA_M      = int(z'300', kind=rlk) ! 0x300
+    INTEGER, PARAMETER :: ZETA_M_SYMM = int(z'100', kind=rlk) ! 0x100
+    INTEGER, PARAMETER :: ZETA_M_FREE = int(z'200', kind=rlk) ! 0x200
+
+    INTEGER, PARAMETER :: ZETA_P      = int(z'c00', kind=rlk) ! 0xc00
+    INTEGER, PARAMETER :: ZETA_P_SYMM = int(z'400', kind=rlk) ! 0x400
+    INTEGER, PARAMETER :: ZETA_P_FREE = int(z'800', kind=rlk) ! 0x800
+
     monoq_limiter_mult = domain%m_monoq_limiter_mult
     monoq_max_slope = domain%m_monoq_max_slope
     qlc_monoq = domain%m_qlc_monoq
     qqc_monoq = domain%m_qqc_monoq
-
-    ! Hacky introduction of the necessary information for the boundary conditions
-    INTEGER, PARAMETER :: XI_M        = z'003' ! 0x003
-    INTEGER, PARAMETER :: XI_M_SYMM   = z'001' ! 0x001
-    INTEGER, PARAMETER :: XI_M_FREE   = z'002' ! 0x002
-
-    INTEGER, PARAMETER :: XI_P        = z'00c' ! 0x00c
-    INTEGER, PARAMETER :: XI_P_SYMM   = z'004' ! 0x004
-    INTEGER, PARAMETER :: XI_P_FREE   = z'008' ! 0x008
-
-    INTEGER, PARAMETER :: ETA_M       = z'030' ! 0x030
-    INTEGER, PARAMETER :: ETA_M_SYMM  = z'010' ! 0x010
-    INTEGER, PARAMETER :: ETA_M_FREE  = z'020' ! 0x020
-
-    INTEGER, PARAMETER :: ETA_P       = z'0c0' ! 0x0c0
-    INTEGER, PARAMETER :: ETA_P_SYMM  = z'040' ! 0x040
-    INTEGER, PARAMETER :: ETA_P_FREE  = z'080' ! 0x080
-
-    INTEGER, PARAMETER :: ZETA_M      = z'300' ! 0x300
-    INTEGER, PARAMETER :: ZETA_M_SYMM = z'100' ! 0x100
-    INTEGER, PARAMETER :: ZETA_M_FREE = z'200' ! 0x200
-
-    INTEGER, PARAMETER :: ZETA_P      = z'c00' ! 0xc00
-    INTEGER, PARAMETER :: ZETA_P_SYMM = z'400' ! 0x400
-    INTEGER, PARAMETER :: ZETA_P_FREE = z'800' ! 0x800
 
 
 !$OMP PARALLEL DO PRIVATE(i, ielem, qlin, qquad, phixi, phieta, phizeta, bcMask,   &
@@ -2158,7 +2165,7 @@ CONTAINS
 !$OMP                      ZETA_M, ZETA_M_SYMM, ZETA_M_FREE, ZETA_P, ZETA_P_COMM,  &
 !$OMP                      ZETA_P_SYMM, ZETA_P_FREE)
     DO i=0, domain%m_regElemSize(r)-1
-      ielem = domain%m_regElemlist(r, i)  !-> What does the r here do? -> Do we want the regions to be in here?
+      ielem = domain%m_regElemlist(domain%m_regElemKeys(r) + i)
       !ielem = domain%m_regElemlist(i)
       bcMask = domain%m_elemBC(ielem)
 
@@ -2349,6 +2356,7 @@ CONTAINS
     REAL(KIND=8) :: monoq_limiter_mult
     REAL(KIND=8) :: qlc_monoq
     REAL(KIND=8) :: qqc_monoq
+    INTEGER(KIND=4) :: r
 
     !
     ! calculate the monotonic q for pure regions
@@ -2420,6 +2428,7 @@ CONTAINS
 
     IMPLICIT NONE
 
+    TYPE(domain_type), INTENT(INOUT) :: domain
     REAL(KIND=8), DIMENSION(0:) :: p_new, bvc, pbvc, e_old
     REAL(KIND=8), DIMENSION(0:) ::  compression
     REAL(KIND=8), DIMENSION(0:) :: vnewc
@@ -2430,7 +2439,7 @@ CONTAINS
     INTEGER(KIND=4) :: length 
 
     INTEGER(KIND=4) :: i, ielem
-    REAL(KIND=8), PARAMETER :: c1s
+    REAL(KIND=8) :: c1s
 
 !$OMP PARALLEL DO PRIVATE(i, c1s) DEFAULT(none) SHARED(bvc, pbvc, compression)
     DO i = 0, length-1
@@ -2442,7 +2451,7 @@ CONTAINS
 !$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none)   &
 !$OMP SHARED(domain, p_new, bvc, e_old, p_cut, vnewc, eosvmax, pmin)
     DO i = 0, length-1
-      ielem = domain%matElemlist(i)
+      ielem = domain%m_regElemlist(i)
 
       p_new(i) = bvc(i) * e_old(i)
 
@@ -2493,7 +2502,7 @@ CONTAINS
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: pHalfStep
     REAL(KIND=8), PARAMETER :: TINY1 = 0.111111e-36_RLK
     REAL(KIND=8), PARAMETER :: TINY3 = 0.333333e-18_RLK
-    REAL(KIND=8), PARAMETER :: SIXTH
+    REAL(KIND=8), PARAMETER :: SIXTH = (1.0_RLK) / (6.0_RLK)
 
 
     ALLOCATE(pHalfStep(0:length-1))
@@ -2555,12 +2564,11 @@ CONTAINS
                               compression, vnewc, pmin, p_cut, &
                               eosvmax, length)
 
-!$OMP PARALLEL DO PRIVATE(i, sixth, ielem, q_tilde, ssc) DEFAULT(none)            &
+!$OMP PARALLEL DO PRIVATE(i, ielem, q_tilde, ssc) DEFAULT(none)            &
 !$OMP SHARED(domain, delvc, pbvc, e_new, vnewc, bvc, p_new, rho0, TINY1, TINY3,   &
 !$OMP        ql, qq, p_old, q_old, pHalfStep, q_new, delvc, e_cut, emin)
     DO i = 0, length-1
       ielem = domain%m_regElemlist(i)
-      SIXTH = (1.0_RLK) / (6.0_RLK)
 
       IF (delvc(i) > (0.0_RLK)) THEN
         q_tilde = (0.0_RLK)
@@ -2671,21 +2679,31 @@ CONTAINS
     INTEGER(KIND=4), PARAMETER :: RLK = 8
     INTEGER(KIND=4) :: rep
 
-    REAL(KIND=8) :: e_cut = domain%m_e_cut 
-    REAL(KIND=8) :: p_cut = domain%m_p_cut
-    REAL(KIND=8) :: ss4o3 = domain%m_ss4o3
-    REAL(KIND=8) :: q_cut = domain%m_q_cut
-    REAL(KIND=8) :: eosvmax = domain%m_eosvmax
-    REAL(KIND=8) :: eosvmin = domain%m_eosvmin
-    REAL(KIND=8) :: pmin = domain%m_pmin
-    REAL(KIND=8) :: emin = domain%m_emin
-    REAL(KIND=8) :: rho0 = domain%m_rho0
+    REAL(KIND=8) :: e_cut
+    REAL(KIND=8) :: ss4o3
+    REAL(KIND=8) :: q_cut
+    REAL(KIND=8) :: p_cut
+    REAL(KIND=8) :: eosvmax
+    REAL(KIND=8) :: eosvmin
+    REAL(KIND=8) :: pmin
+    REAL(KIND=8) :: emin
+    REAL(KIND=8) :: rho0
     REAL(KIND=8) :: vchalf
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: e_old, &
                   delvc, p_old, q_old, compression,   &
                   compHalfStep, qq, ql, work, p_new,  &
                   e_new, q_new, bvc, pbvc
     INTEGER      :: i, j, ielem
+
+    e_cut = domain%m_e_cut 
+    p_cut = domain%m_p_cut
+    ss4o3 = domain%m_ss4o3
+    q_cut = domain%m_q_cut
+    eosvmax = domain%m_eosvmax
+    eosvmin = domain%m_eosvmin
+    pmin = domain%m_pmin
+    emin = domain%m_emin
+    rho0 = domain%m_refdens
 
     ALLOCATE(e_old(0:length-1))
     ALLOCATE(delvc(0:length-1))
@@ -2741,7 +2759,7 @@ CONTAINS
 !$OMP PARALLEL DO PRIVATE(i, ielem) DEFAULT(none)   &
 !$OMP SHARED(domain, vnewc, eosvmax, p_old, compression, compHalfStep)
         DO i = 0, length-1
-          ielem = domain$m_regElemlist(i)
+          ielem = domain%m_regElemlist(i)
           IF (vnewc(ielem) >= eosvmax) THEN ! impossible due to calling func? 
             p_old(i)        = (0.0_RLK)
             compression(i)  = (0.0_RLK)
@@ -2800,17 +2818,21 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    REAL(KIND=8) :: eosvmin = domain%m_eosvmin
-    REAL(KIND=8) :: eosvmax = domain%m_eosvmax
+    REAL(KIND=8) :: eosvmin
+    REAL(KIND=8) :: eosvmax
     REAL(KIND=8) :: vc
     REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: vnewc
-    INTEGER(KIND=4) :: length, ielem, numElemReg
+    INTEGER(KIND=4) :: length, numElemReg
+    INTEGER(KIND=4), POINTER :: ielem
     INTEGER(KIND=4) :: i, r
     INTEGER(KIND=4), PARAMETER :: RLK = 8
+    INTEGER(KIND=4) :: rep
 
     ! Hacky hacky
     INTEGER(KIND=4), PARAMETER :: VolumeError = -1
 
+    eosvmin = domain%m_eosvmin
+    eosvmax = domain%m_eosvmax
     length = domain%m_numElem
 
     IF (length /= 0) THEN
@@ -2867,7 +2889,6 @@ CONTAINS
 
     DO r=0, domain%m_numReg-1
       numElemReg = domain%m_regElemSize(r)
-      ielem => domain%m_regElemlist(r)
 
       ! Determine load imbalance for this region
       ! round down the number with lowest cost
@@ -2879,7 +2900,7 @@ CONTAINS
         rep = 10 * (1 + domain%m_cost)
       ENDIF
 
-      CALL EvalEOSForElems(domain, vnewc, length)
+      CALL EvalEOSForElems(domain, vnewc, length, rep)
     ENDDO
 
     DEALLOCATE(vnewc)
@@ -2892,11 +2913,14 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
-    REAL(KIND=8)    :: v_cut = domain%m_v_cut
+    REAL(KIND=8)    :: v_cut
     REAL(KIND=8)    :: tmpV
-    INTEGER(KIND=4) :: numElem = domain%m_numElem
+    INTEGER(KIND=4) :: numElem
     INTEGER(KIND=4) :: i
     INTEGER(KIND=4), PARAMETER :: RLK = 8
+
+    v_cut = domain%m_v_cut
+    numElem = domain%m_numElem
 
     IF (numElem /= 0) THEN
 !$OMP PARALLEL DO PRIVATE(i, tmpV) DEFAULT(none) SHARED(domain, v_cut)
@@ -3103,6 +3127,8 @@ CONTAINS
     IMPLICIT NONE
 
     TYPE(domain_type), INTENT(INOUT) :: domain
+    INTEGER(KIND=4), PARAMETER :: RLK = 8
+    INTEGER :: r
 
     ! Initialize conditions to a very large value
     domain%m_dtcourant = 1.0e+20_RLK
@@ -3167,8 +3193,8 @@ CONTAINS
     IMPLICIT NONE
     REAL(KIND=8), DIMENSION(0:7) :: x, y, z
     INTEGER(KIND=4), PARAMETER :: RLK = 8
-    REAL(KIND=8)  :: volume=0.0_RLK
-    REAL(KIND=8) :: twelveth = (1.0_RLK)/(12.0_RLK)
+    REAL(KIND=8)  :: volume
+    REAL(KIND=8), PARAMETER :: twelveth = (1.0_RLK)/(12.0_RLK)
 
     REAL(KIND=8) :: dx61
     REAL(KIND=8) :: dy61
@@ -3218,6 +3244,7 @@ CONTAINS
     REAL(KIND=8) :: dy25 
     REAL(KIND=8) :: dz25
 
+    volume = 0.0_RLK
 
     dx61 = x(6) - x(1)
     dy61 = y(6) - y(1)
