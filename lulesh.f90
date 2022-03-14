@@ -118,7 +118,7 @@ REAL(KIND=8) :: starttim, endtim
 REAL(KIND=8) :: elapsed_time
 
 ! Initial energy, which is later to be deposited
-REAL(KIND=8) :: ebase = 3.948746e+7_RLK
+REAL(KIND=8), PARAMETER :: ebase = 3.948746e+7_RLK
 REAL(KIND=8) :: scale, einit
 
 
@@ -150,14 +150,25 @@ INTEGER, PARAMETER :: ZETA_P_FREE = z'800' ! 0x800
 
 CHARACTER(len=10) :: arg
 
-INTEGER ::  ElemId = 0
+INTEGER ::  ElemId
 
-REAL(KIND=8) :: MaxAbsDiff   = 0.0_RLK
-REAL(KIND=8) :: TotalAbsDiff = 0.0_RLK
-REAL(KIND=8) :: MaxRelDiff   = 0.0_RLK
+REAL(KIND=8) :: MaxAbsDiff
+REAL(KIND=8) :: TotalAbsDiff
+REAL(KIND=8) :: MaxRelDiff
 
 REAL(KIND=8) :: AbsDiff, RelDiff
 
+INTEGER :: regionNum, regionVar, binSize, lastReg, elements, &
+              runto, costDenominator
+INTEGER, DIMENSION(:), ALLOCATABLE :: regBinEnd
+
+ElemId = 0
+MaxAbsDiff = 0.0_RLK
+TotalAbsDiff = 0.0_RLK
+MaxRelDiff = 0.0_RLK
+
+! Symmetry planes have not been set yet
+domain%m_symm_is_set = .FALSE.
 
 !CALL GETARG(1, arg)
 !READ(arg,*) edgeElems
@@ -236,6 +247,9 @@ CALL AllocateElemTemporary (domain, domain%m_numElem)
 CALL AllocateNodalPersistent(domain, domain%m_numNode) 
 CALL AllocateNodesets(domain, edgeNodes*edgeNodes)
 
+!!!!!!!
+!TODO(Ludger): SetupCommBuffers needs to be added here.
+!!!!!!!
 
 ! Basic Field Initialization
 DO i=0, numElem-1
@@ -284,13 +298,10 @@ DO plane=0, edgeNodes-1
 
          nidx = nidx+1
          tx = 1.125_RLK * (domain%m_colLoc*opts_nx + col+1) / meshEdgeElems
-         !tx = (1.125_RLK*REAL((col+1),8))/REAL(edgeElems,8)
       END DO
       ty = 1.125_RLK * (domain%m_rowLoc*opts_nx + row+1) / meshEdgeElems
-      !ty = 1.125_RLK*REAL((row+1),8)/REAL(edgeElems,8)
    END DO
    tz = 1.125_RLK * (domain%m_planeLoc*opts_nx + plane+1) / meshEdgeElems
-   !tz = 1.125_RLK*REAL((plane+1),8)/REAL(edgeElems,8)
 END DO
 
 ! embed hexehedral elements in nodal point lattice
@@ -317,7 +328,8 @@ DO plane=0, edgeElems-1
    nidx = nidx + edgeNodes
 END DO
 
-NULLIFY(localNode)
+!TODO(Ludger): Why was there a nullify here?
+!NULLIFY(localNode)
 
 #if _OPENMP
 ! Setup the thread support structures
@@ -336,57 +348,169 @@ IF (numthreads > 1) THEN
          nodeElemCount(nl(j)) = nodeElemCount(nl(j)) + 1
       END DO
    END DO
-ENDIF
 
-ALLOCATE(nodeElemStart(0:domain%m_numNode-1))
-nodeElemStart(0) = 0
+   ALLOCATE(nodeElemStart(0:domain%m_numNode-1))
+   nodeElemStart(0) = 0
 
-DO i=1, domain%m_numNode
-   nodeElemStart(i) = nodeElemStart(i-1) + nodeElemCount(i-1)
-END DO
-
-! TODO(Jan & Ludger): Double-check this!!
-ALLOCATE(nodeElemCornerList(0:nodeElemStart(domain%m_numNode)-1))
-
-DO i=0, domain%m_numNode-1
-   nodeElemCount(i) = 0
-END DO
-
-DO i=0, numElem-1
-   nl => domain%m_nodelist(i*8)
-   DO j=0, 7
-      m = nl(j)
-      k = i*8 + j
-      offset = nodeElemStart(m) + nodeElemCount(m)
-      nodeElemCornerList(offset) = k
-      nodeElemCount(m) = nodeElemCount(m) + 1
+   DO i=1, domain%m_numNode
+      nodeElemStart(i) = nodeElemStart(i-1) + nodeElemCount(i-1)
    END DO
-END DO
 
-clSize = nodeElemStart(domain%m_numNode)
-DO i=0, clSize-1
-   clv = nodeElemCornerList(i)
-   IF ((clv.LT.0).OR.(clv.GT.numElem*8))THEN
-      PRINT*, "ERROR: clv = ", clv
-      PRINT*, "ERROR: clv.LT.0 = ", (clv.LT.0)
-      PRINT*, "ERROR: numElem*8 = ", numElem*8
-      PRINT*, "ERROR: clv.GT.numElem*8 = ", (clv.GT.numElem*8)
-      PRINT*,"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"
-      CALL luabort(1)
-   END IF
-END DO
+   ALLOCATE(nodeElemCornerList(0:nodeElemStart(domain%m_numNode)-1))
 
-NULLIFY(nodeElemCount)
+   DO i=0, domain%m_numNode-1
+      nodeElemCount(i) = 0
+   END DO
+
+   DO i=0, numElem-1
+      nl => domain%m_nodelist(i*8)
+      DO j=0, 7
+         m = nl(j)
+         k = i*8 + j
+         offset = nodeElemStart(m) + nodeElemCount(m)
+         nodeElemCornerList(offset) = k
+         nodeElemCount(m) = nodeElemCount(m) + 1
+      END DO
+   END DO
+
+   clSize = nodeElemStart(domain%m_numNode)
+   DO i=0, clSize-1
+      clv = nodeElemCornerList(i)
+      IF ((clv.LT.0).OR.(clv.GT.numElem*8))THEN
+         PRINT*, "ERROR: clv = ", clv
+         PRINT*, "ERROR: clv.LT.0 = ", (clv.LT.0)
+         PRINT*, "ERROR: numElem*8 = ", numElem*8
+         PRINT*, "ERROR: clv.GT.numElem*8 = ", (clv.GT.numElem*8)
+         PRINT*,"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"
+         CALL luabort(1)
+      END IF
+   END DO
+
+   DEALLOCATE(nodeElemCount)
+ENDIF
 
 #endif
 
 ! CreateRegionIndexSets(nr, balance)
 ! Inputs in our case: opts_numReg, opts_balance
 
+! Equivalent to rand is `rand()`
+! binSize = MOD(rand(), 1000) instead of binSize = rand() % 1000
+
 ! Setup region index sets. For now, these are constant sized
 ! throughout the run, but could be changed every cycle to
 ! simulate effects of ALE on the Lagrange solver
-srand(0)n  ! TODO(Jan & Ludger): What is this in FORTRAN land?
+CALL srand(0)
+myRank = 0
+
+domain%m_numReg = opts_numReg
+!Index_t&  regElemSize(Index_t idx) { return m_regElemSize[idx] ; }
+ALLOCATE(m_regElemSize(0:domain%m_numReg-1))
+!To store the start of each chunk in regElemlist
+ALLOCATE(m_regElemKeys(0:domain%m_numReg))
+nextIndex = 0
+
+! If we only have one region just fill it
+! Fill out the regNumList with material numbers, which are always
+! the region index plus one
+IF (domain%m_numReg == 1) THEN
+   DO WHILE (nextIndex < domain%m_numElem)
+      domain%m_regNumList(nextIndex) = 1
+      nextIndex = nextIndex + 1
+   END DO
+   domain%m_regElemSize(0) = 0
+ELSE
+   lastReg = -1
+   runto = 0
+   costDenominator = 0
+   ALLOCATE(regBinEnd(0:domain%m_numReg-1))
+   ! Determine the relative weight of all regions. This is based off
+   ! the -b flag. Balance is the value passed into b.
+   DO i=0, domain%m_numReg-1
+      domain%m_regElemSize(i) = 0
+      costDenominator = costDenominator + (i+1)**opts_balance
+      regBinEnd(i) = costDenominator
+   END DO
+
+   DO WHILE (nextIndex < domain%m_numElem)
+      ! Pick the region
+      regionVar = MOD(rand(), costDenominator)
+      i = 0
+      DO WHILE (regionVar .GE. regBinEnd(i))
+         i = i + 1
+      END DO
+
+      regionNum = MOD(i + myRank, domain%m_numReg) + 1
+      DO WHILE (regionNum .EQ. lastReg)
+         regionVar = MOD(rand(), costDenominator)
+         i = 0
+         DO WHILE (regionVar .GE. regBinEnd(i))
+            i = i + 1
+         END DO
+         regionNum = MOD(i + myRank, domain%m_numReg) + 1
+      END DO
+
+      ! Pick the bin size of the region and determine the number of elements.
+      binSize = MOD(rand(), 1000)
+      IF (binSize .LT. 773) THEN
+         elements = MOD(rand(), 15) + 1
+      ELSE IF (binSize .LT. 937) THEN
+         elements = MOD(rand(), 16) + 16
+      ELSE IF (binSize .LT. 970) THEN
+         elements = MOD(rand(), 32) + 32
+      ELSE IF (binSize .LT. 974) THEN
+         elements = MOD(rand(), 64) + 64
+      ELSE IF (binSize .LT. 978) THEN
+         elements = MOD(rand(), 128) + 128
+      ELSE IF (binSize .LT. 981) THEN
+         elements = MOD(rand(), 256) + 256
+      ELSE
+         elements = MOD(rand(), 1537) + 512
+         runto = elements + nextIndex
+         ! Store the elements. If we hit the end before we run out of
+         ! elements then just stop.
+         DO WHILE (nextIndex .LT. runto .AND. nextIndex .LT. domain%m_numElem)
+            domain%m_regNumList(nextIndex) = regionNum
+            nextIndex = nextIndex + 1
+         END DO
+         lastReg = regionNum
+      END IF
+
+      DEALLOCATE(regBinEnd)
+   END DO
+
+   ! Convert regNumList to region index sets
+   ! First, count size of each region
+   DO (i=0, domain%m_numElem-1)
+      r = domain%m_regNumList(i) - 1
+      m_regElemSize(r) = m_regElemSize(r) + 1
+   END DO
+
+   ! Allocate the region index sets as one big array
+   ALLOCATE(m_regElemList(0:SUM(m_regElemSize)))
+
+   ! Get the keys to each region index set
+   domain%m_regElemKeys(0) = 0
+   DO (i=1, domain%m_numElem)
+      domain%m_regElemKeys(i) = domain%m_regElemKeys(i-1) + m_regElemSize(i-1)
+   END DO
+
+   ! Set the array to 0
+   m_regElemSize = 0
+
+   ! Third, fill index sets
+   DO (i=0, domain%m_numElem-1)
+      r = domain%m_regNumList(i) - 1
+      regndx = m_regElemSize(r)
+      m_regElemSize(r) = m_regElemSize(r) + 1
+      regElemlist(domain%m_regElemKeys(r)+regndx) = i
+      ! Index_t r = regNumList(i)-1;       // region index == regnum-1
+      ! Index_t regndx = regElemSize(r)++; // Note increment
+      ! regElemlist(r,regndx) = i;
+   END DO
+END IF
+
+STOP
 
 
 
@@ -481,6 +605,7 @@ END DO
        domain%m_symmY(nidx) = planeInc + j
        domain%m_symmZ(nidx) = rowInc   + j
        nidx=nidx+1
+       domain%m_symm_is_set = .TRUE.
     END DO
  END DO
 
