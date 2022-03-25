@@ -31,10 +31,13 @@ jobs:
           sudo update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-10 100
           sudo update-alternatives --set gfortran /usr/bin/gfortran-10
           
-      - name: Build LULESH
-        run: |
-          gfortran -c lulesh_comp_kernels.f90
-          gfortran -c lulesh.f90
-          gfortran lulesh_comp_kernels.o lulesh.o
+      - name: Compile the .mod file
+        run: gfortran -c lulesh_comp_kernels.f90
+          
+      - name: Compile the object file of the program
+        run:  gfortran -c lulesh.f90
+        
+      - name: Link the Executable
+        run:  gfortran lulesh_comp_kernels.o lulesh.o
 
     
