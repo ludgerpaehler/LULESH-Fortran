@@ -1,0 +1,40 @@
+name: GFortran CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the main branch
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  
+  # Allows to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-20.04
+    
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    
+      # Checks-out your repository under GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+      
+      # Setup the dependencies
+      - name: Install dependencies
+        run: |
+          sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install gcc-10 gfortran-10 g++-10
+          sudo update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-10 100
+          sudo update-alternatives --set gfortran /usr/bin/gfortran-10
+          
+      - name: Build LULESH
+        run: |
+          gfortran -c lulesh_comp_kernels.f90
+          gfortran -c lulesh.f90
+          gfortran lulesh_comp_kernels.o lulesh.o
+
+    
