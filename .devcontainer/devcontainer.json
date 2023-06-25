@@ -1,0 +1,15 @@
+{
+	"name": "devcontainer for Lulesh-Fortran",
+	"dockerFile": "Dockerfile",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools",
+				"intel-corporation.oneapi-gdb-debug",
+				"krvajalm.linter-gfortran"
+			]
+		}
+	},
+	"capAdd": ["SYS_PTRACE"],
+    "securityOpt": ["seccomp=unconfined"]
+}
