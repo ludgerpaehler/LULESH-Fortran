@@ -49,3 +49,9 @@ llvm:
 
 clean-llvm:
 	rm -rf llvm-project/build/
+
+oneapi:
+	echo "blub"
+
+clean-oneapi:
+	echo "blub"
