@@ -2,10 +2,12 @@ FFLAGS = -O3 -flto
 CFLAGS = -std=c99 -Wall -O3 -flto
 CPPFLAGS =
 
-
-CLANG = /home/lpaehler/Work/Dev-Tools/llvm-fortran/f18-llvm-project/build/bin/clang
-
-LLVM_PATH = /home/lpaehler/Work/Dev-Tools/llvm-fortran/f18-llvm-project/build
+# Default paths, which can be overwritten by exporting own flags, i.e.
+#	`export CLANG=/path/to/own/clang`
+# on the command line
+LLVM_PATH ?= /home/lpaehler/Work/Dev-Tools/llvm-fortran/f18-llvm-project/build
+CLANG ?= $(LLVM_PATH)/build/bin/clang
+FLANG ?= $(LLVM_PATH)/build/bin/flang-new
 
 ENZYME_PATH = /home/lpaehler/Work/AutomaticDifferentiation/Enzyme/build/Enzyme/LLVMEnzyme-13.so
 LLVM13_PATH = /home/lpaehler/Work/AutomaticDifferentiation/llvm-project/build
@@ -34,3 +36,16 @@ lulesh.o: postenzyme.ll
 
 clean:
 	rm -f *.ll *.o
+
+llvm:
+	cmake -G Ninja -B llvm-project/build/ -S llvm-project/llvm \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DLLVM_TARGETS_TO_BUILD="host" \
+		-DLLVM_ENABLE_ASSERTIONS=ON \
+		-DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;lldb;flang;openmp" \
+		-DLLDB_USE_SYSTEM_DEBUGSERVER=ON \
+		-DLLDB_INCLUDE_TESTS=OFF
+	cmake --build llvm-project/build/
+
+clean-llvm:
+	rm -rf llvm-project/build/
