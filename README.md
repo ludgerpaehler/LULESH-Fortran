@@ -1,34 +1,31 @@
 # LULESH Fortran
 
-## LLVM Production Build
+## Compilation
 
-Used FORTRAN compiler
+tbd
 
-```bash
-git clone https://github.com/wsmoses/f18-llvm-project/tree/fir-dev
-```
+## Building the Compiler Toolchain
 
-Go into the repo, create a build directory, and 
+### LLVM Toolchain
 
-```bash
-cd f18-llvm-project
-mkdir build
-cd build
-```
-
-And then build F18
+For the llvm-project dependency, we can either clone recursively or can initialize the submodules post-hoc
 
 ```bash
-cmake -G Ninja ../llvm/ -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_ENABLE_PROJECTS="clang;flang;parallel-libs;openmp" -DLLVM_ENABLE_PLUGINS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON
-ninja
+git clone --recursive https://github.com/ludgerpaehler/LULESH-Fortran.git
 ```
 
-
-## GFortran Debug Build
-
-Using GNU Fortran (GCC) 10.2.1 packaged with Fedora
+or for initializing the submodule
 
 ```bash
-gfortran lulesh.f90 lulesh_comp_kernels.f90 -fallow-invalid-boz -cpp
+git submodule update --init --recursive
 ```
 
+To then build the LLVM toolchain one just has to call onto the Makefile from the root of the repository
+
+```bash
+make llvm
+```
+
+### Intel OneAPI Toolchain
+
+tbd
