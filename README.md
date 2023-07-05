@@ -28,4 +28,4 @@ make llvm
 
 ### Intel OneAPI Toolchain
 
-tbd
+To install the Intel oneAPI toolchain, please follow the provided instructions on Intel's [website](https://www.intel.com/content/www/us/en/developer/tools/oneapi/hpc-toolkit-download.html).
