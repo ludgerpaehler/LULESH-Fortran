@@ -1,9 +1,9 @@
 MODULE lulesh_comp_kernels
 
 ! Use Open-MP, the call on the module level covers all subroutines contained herein
-#if _OPENMP
-  USE OMP_LIB
-#endif
+!#if _OPENMP
+!  USE OMP_LIB
+!#endif
 
 IMPLICIT NONE
 PRIVATE 
@@ -831,11 +831,11 @@ CONTAINS
     numNode = domain%m_numNode
     numElem8 = numElem * 8
 
-#if _OPENMP
-      numthreads = OMP_GET_MAX_THREADS()
-#else
+!#if _OPENMP
+!      numthreads = OMP_GET_MAX_THREADS()
+!#else
       numthreads = 1
-#endif
+!#endif
 
     IF (numthreads  > 1) THEN
       ! Is this right? - Unsure about the allocation
@@ -1141,11 +1141,11 @@ CONTAINS
     fz_tmp = 0.0_RLK
     numNode = domain%m_numNode
 
-#if _OPENMP
-      numthreads = OMP_GET_MAX_THREADS()
-#else
+!#if _OPENMP
+!      numthreads = OMP_GET_MAX_THREADS()
+!#else
       numthreads = 1
-#endif
+!#endif
 
     NULLIFY(fx_local, fy_local, fz_local)
     NULLIFY(fx_elem, fy_elem, fz_elem)
@@ -1568,8 +1568,6 @@ CONTAINS
   END SUBROUTINE CalcAccelerationForNodes
 
 
-  ! NOTE: There are no checks implemented in the FORTRAN version
-  !       this needs to be checked with Jan.
   SUBROUTINE ApplyAccelerationBoundaryConditionsForNodes(domain)
     IMPLICIT NONE
 
@@ -2841,7 +2839,6 @@ CONTAINS
 
 !$OMP PARALLEL DO PRIVATE(i) DEFAULT(none) SHARED(domain, vnewc)
       DO i = 0, length-1
-        !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
         vnewc(i) = domain%m_vnew(i)
       ENDDO
 
@@ -2869,7 +2866,6 @@ CONTAINS
 !$OMP PARALLEL DO PRIVATE(i, vc) DEFAULT(none)   &
 !$OMP SHARED(domain, eosvmin, eosvmax, VolumeError)
       DO i = 0, length-1
-        !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
         vc = domain%m_v(i)
         IF (eosvmin /= (0.0_RLK)) THEN
           IF (vc < eosvmin) THEN
@@ -2978,15 +2974,15 @@ CONTAINS
 
     length = domain%m_numElem
     
-#if _OPENMP
-      threads = OMP_GET_MAX_THREADS()
-      ALLOCATE(dtcourant_per_thread(0:threads-1))
-      ALLOCATE(courant_elem_per_thread(0:threads-1))
-#else
+!#if _OPENMP
+!      threads = OMP_GET_MAX_THREADS()
+!      ALLOCATE(dtcourant_per_thread(0:threads-1))
+!      ALLOCATE(courant_elem_per_thread(0:threads-1))
+!#else
       threads = 1_4
       ALLOCATE(dtcourant_per_thread(0:threads-1))
       ALLOCATE(courant_elem_per_thread(0:threads-1))
-#endif
+!#endif
 
     qqc = domain%m_qqc
 
@@ -2998,11 +2994,11 @@ CONTAINS
     dtcourant_tmp = domain%m_dtcourant  ! TODO(Ludger): Does this need to be a pointer?
     COURANT_ELEM = -1
 
-#if _OPENMP
-      thread_num = OMP_GET_THREAD_NUM()
-#else
+!#if _OPENMP
+!      thread_num = OMP_GET_THREAD_NUM()
+!#else
       thread_num = 0_4
-#endif
+!#endif
 
 !$OMP DO
     DO i = 0, length-1
@@ -3063,37 +3059,35 @@ CONTAINS
     INTEGER(KIND=4) :: indx, thread_num, i
     REAL(KIND=8) :: dthydro_tmp
 
-#if _OPENMP
-      threads = OMP_GET_MAX_THREADS()
-      ALLOCATE(dthydro_per_thread(0:threads-1))
-      ALLOCATE(hydro_elem_per_thread(0:threads-1))
-#else
+!#if _OPENMP
+!      threads = OMP_GET_MAX_THREADS()
+!      ALLOCATE(dthydro_per_thread(0:threads-1))
+!      ALLOCATE(hydro_elem_per_thread(0:threads-1))
+!#else
       threads = 1
       ALLOCATE(dthydro_per_thread(0:threads-1))
       ALLOCATE(hydro_elem_per_thread(0:threads-1))
-#endif
+!#endif
 
     dvovmax = domain%m_dvovmax
     length = domain%m_numElem
 
-    ! CALL __ENZYME_INTEGER(hydro_elem)
 !$OMP PARALLEL PRIVATE(dthydro_tmp, hydro_elem, thread_num, i, indx, dtdvov)   &
 !$OMP DEFAULT(none) SHARED(domain, dvovmax, dthydro_per_thread, hydro_elem_per_thread)
     dthydro_tmp = domain%m_dthydro
     hydro_elem = -1
 
-#if _OPENMP
-      thread_num = OMP_GET_THREAD_NUM()
-#else
+!#if _OPENMP
+!      thread_num = OMP_GET_THREAD_NUM()
+!#else
       thread_num = 0
-#endif
+!#endif
     dthydro_tmp = domain%m_dthydro
     hydro_elem = -1
 
 !$OMP DO
     DO i = 0, length-1
       indx = domain%m_regElemlist(i)
-      !CALL __ENZYME_INTEGER(domain%m_matElemlist(i))
       IF (domain%m_vdov(indx) /= (0.0_RLK)) THEN
         dtdvov = dvovmax / (ABS(domain%m_vdov(indx))+(1.e-20_RLK))
         IF ( dthydro_tmp > dtdvov ) THEN

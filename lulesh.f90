@@ -97,8 +97,7 @@ INTEGER(KIND=4), PARAMETER :: RLK = 8
 
 ! Start of main
 TYPE(domain_type) :: domain
-!TYPE(domain_type) :: grad_domain  ! Datastruct to store the gradients in  - deactivated for the debugging of the primal
-INTEGER :: edgeElems 
+INTEGER :: edgeElems
 INTEGER :: edgeNodes
 INTEGER :: opts_its, opts_nx, opts_numReg, opts_showProg,   &
            opts_quiet, opts_viz, opts_balance, opts_cost
@@ -248,7 +247,7 @@ CALL AllocateNodalPersistent(domain, domain%m_numNode)
 CALL AllocateNodesets(domain, edgeNodes*edgeNodes)
 
 !!!!!!!
-!TODO(Ludger): SetupCommBuffers needs to be added here.
+!TODO(Ludger): SetupCommBuffers needs to be added here. -> Do I need them even for OpenMP?
 !!!!!!!
 
 ! Basic Field Initialization
@@ -331,65 +330,66 @@ END DO
 !TODO(Ludger): Why was there a nullify here?
 !NULLIFY(localNode)
 
-#if _OPENMP
+! <-- To be commented out!
 ! Setup the thread support structures
-numthreads = OMP_GET_MAX_THREADS()
-
-IF (numthreads > 1) THEN
-   ALLOCATE(nodeElemCount(0:domain%m_numNode-1))
-
-   DO i=0, domain%m_numNode-1
-      nodeElemCount(i) = 0
-   END DO
-
-   DO i=0, domain%m_numElem-1
-      nl => domain%m_nodelist(i*8)
-      DO j=0, 7
-         nodeElemCount(nl(j)) = nodeElemCount(nl(j)) + 1
-      END DO
-   END DO
-
-   ALLOCATE(nodeElemStart(0:domain%m_numNode-1))
-   nodeElemStart(0) = 0
-
-   DO i=1, domain%m_numNode
-      nodeElemStart(i) = nodeElemStart(i-1) + nodeElemCount(i-1)
-   END DO
-
-   ALLOCATE(nodeElemCornerList(0:nodeElemStart(domain%m_numNode)-1))
-
-   DO i=0, domain%m_numNode-1
-      nodeElemCount(i) = 0
-   END DO
-
-   DO i=0, numElem-1
-      nl => domain%m_nodelist(i*8)
-      DO j=0, 7
-         m = nl(j)
-         k = i*8 + j
-         offset = nodeElemStart(m) + nodeElemCount(m)
-         nodeElemCornerList(offset) = k
-         nodeElemCount(m) = nodeElemCount(m) + 1
-      END DO
-   END DO
-
-   clSize = nodeElemStart(domain%m_numNode)
-   DO i=0, clSize-1
-      clv = nodeElemCornerList(i)
-      IF ((clv.LT.0).OR.(clv.GT.numElem*8))THEN
-         PRINT*, "ERROR: clv = ", clv
-         PRINT*, "ERROR: clv.LT.0 = ", (clv.LT.0)
-         PRINT*, "ERROR: numElem*8 = ", numElem*8
-         PRINT*, "ERROR: clv.GT.numElem*8 = ", (clv.GT.numElem*8)
-         PRINT*,"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"
-         CALL luabort(1)
-      END IF
-   END DO
-
-   DEALLOCATE(nodeElemCount)
-ENDIF
-
-#endif
+!#if _OPENMP
+!    numthreads = OMP_GET_MAX_THREADS()
+!
+!IF (numthreads > 1) THEN
+!   ALLOCATE(nodeElemCount(0:domain%m_numNode-1))
+!
+!   DO i=0, domain%m_numNode-1
+!      nodeElemCount(i) = 0
+!   END DO
+!
+!   DO i=0, domain%m_numElem-1
+!      nl => domain%m_nodelist(i*8)
+!      DO j=0, 7
+!        nodeElemCount(nl(j)) = nodeElemCount(nl(j)) + 1
+!      END DO
+!   END DO
+!
+!   ALLOCATE(nodeElemStart(0:domain%m_numNode-1))
+!   nodeElemStart(0) = 0
+!
+!   DO i=1, domain%m_numNode
+!      nodeElemStart(i) = nodeElemStart(i-1) + nodeElemCount(i-1)
+!   END DO
+!
+!   ALLOCATE(nodeElemCornerList(0:nodeElemStart(domain%m_numNode)-1))
+!
+!   DO i=0, domain%m_numNode-1
+!      nodeElemCount(i) = 0
+!   END DO
+!
+!   DO i=0, numElem-1
+!      nl => domain%m_nodelist(i*8)
+!      DO j=0, 7
+!         m = nl(j)
+!         k = i*8 + j
+!         offset = nodeElemStart(m) + nodeElemCount(m)
+!         nodeElemCornerList(offset) = k
+!         nodeElemCount(m) = nodeElemCount(m) + 1
+!      END DO
+!   END DO
+!
+!   clSize = nodeElemStart(domain%m_numNode)
+!   DO i=0, clSize-1
+!      clv = nodeElemCornerList(i)
+!      IF ((clv.LT.0).OR.(clv.GT.numElem*8))THEN
+!         PRINT*, "ERROR: clv = ", clv
+!         PRINT*, "ERROR: clv.LT.0 = ", (clv.LT.0)
+!         PRINT*, "ERROR: numElem*8 = ", numElem*8
+!         PRINT*, "ERROR: clv.GT.numElem*8 = ", (clv.GT.numElem*8)
+!         PRINT*,"AllocateNodeElemIndexes(): nodeElemCornerList entry out of range!"
+!         CALL luabort(1)
+!      END IF
+!   END DO
+!
+!   DEALLOCATE(nodeElemCount)
+!ENDIF
+!
+!#endif
 
 ! CreateRegionIndexSets(nr, balance)
 ! Inputs in our case: opts_numReg, opts_balance
@@ -677,8 +677,6 @@ CALL CPU_TIME(starttim)
 DO
    call TimeIncrement(domain)
    CALL LagrangeLeapFrog(domain)
-   ! CALL LagrangeLeapFrog(grad_domain)
-   !CALL __ENZYME_AUTODIFF(LagrangeLeapFrog, domain, grad_domain)
 
 !#ifdef LULESH_SHOW_PROGRESS
 !   PRINT *,"time = ", domain%m_time, " dt=",domain%m_deltatime
