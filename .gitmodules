@@ -2,3 +2,7 @@
 	path = llvm-project
 	url = https://github.com/llvm/llvm-project.git
 	branch = release/16.x
+[submodule "LULESH-LLNL"]
+	path = LULESH-LLNL
+	url = https://github.com/LLNL/LULESH.git
+	branch = 2.0.2-dev
